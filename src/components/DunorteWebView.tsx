@@ -27,6 +27,8 @@ type Props = {
   onOnlineChange?: (online: boolean) => void;
 };
 
+const LOADING_TIMEOUT_MS = 8000;
+
 export function DunorteWebView({ onOnlineChange }: Props) {
   const webRef = useRef<WebView>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +38,29 @@ export function DunorteWebView({ onOnlineChange }: Props) {
   const batteryUnsubRef = useRef<null | (() => void)>(null);
   const networkUnsubRef = useRef<null | (() => void)>(null);
   const locationSubRef = useRef<LocationSubscription | null>(null);
+  const firstLoadDoneRef = useRef(false);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearLoadingTimeout = useCallback(() => {
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+  }, []);
+
+  const showLoading = useCallback(() => {
+    setLoading(true);
+    clearLoadingTimeout();
+    loadingTimeoutRef.current = setTimeout(() => {
+      setLoading(false);
+      loadingTimeoutRef.current = null;
+    }, LOADING_TIMEOUT_MS);
+  }, [clearLoadingTimeout]);
+
+  const hideLoading = useCallback(() => {
+    clearLoadingTimeout();
+    setLoading(false);
+  }, [clearLoadingTimeout]);
 
   const sendResponse = useCallback((response: BridgeResponse) => {
     const script = `window.DunorteNative && window.DunorteNative.__handleMessage(${JSON.stringify(
@@ -217,8 +242,9 @@ export function DunorteWebView({ onOnlineChange }: Props) {
       batteryUnsubRef.current?.();
       networkUnsubRef.current?.();
       locationSubRef.current?.remove();
+      clearLoadingTimeout();
     };
-  }, []);
+  }, [clearLoadingTimeout]);
 
   return (
     <View style={styles.container}>
@@ -231,13 +257,23 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         injectedJavaScriptBeforeContentLoaded={INJECTED_JS}
         injectedJavaScript={INJECTED_JS}
         onMessage={onMessage}
-        onLoadStart={() => setLoading(true)}
-        onLoadEnd={() => setLoading(false)}
+        onLoadStart={() => {
+          if (!firstLoadDoneRef.current) showLoading();
+        }}
+        onLoadEnd={() => {
+          firstLoadDoneRef.current = true;
+          hideLoading();
+        }}
+        onLoadProgress={({ nativeEvent }) => {
+          if (nativeEvent.progress >= 0.7) hideLoading();
+        }}
         onNavigationStateChange={(state) => setCanGoBack(state.canGoBack)}
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
+          hideLoading();
           Alert.alert('Erro ao carregar', nativeEvent.description || 'Falha na página.');
         }}
+        onHttpError={() => hideLoading()}
         javaScriptEnabled
         domStorageEnabled
         allowsBackForwardNavigationGestures
