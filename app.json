@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Dunorte Promotores",
+    "name": "Vexo",
     "slug": "app-promotores-dunorte",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/appstore.png",
+    "icon": "./assets/icon_transparent.png",
     "scheme": "dunortepromotores",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/appstore.png",
+      "image": "./assets/icon_transparent.png",
       "resizeMode": "contain",
       "backgroundColor": "#1565C0"
     },
@@ -19,7 +19,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "br.com.dunorte.promotores",
-      "icon": "./assets/appstore.png",
+      "icon": "./assets/icon_transparent.png",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Precisamos da sua localização para registrar visitas e rotas de promotor.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Precisamos da sua localização para registrar visitas e rotas de promotor.",
@@ -28,9 +28,9 @@
     },
     "android": {
       "package": "br.com.dunorte.promotores",
-      "icon": "./assets/playstore.png",
+      "icon": "./assets/icon_transparent.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/playstore.png",
+        "foregroundImage": "./assets/playstore_adaptive_fg.png",
         "backgroundColor": "#1565C0"
       },
       "permissions": [
