@@ -4,15 +4,22 @@
     "slug": "app-promotores-dunorte",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/appstore.png",
     "scheme": "dunortepromotores",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/appstore.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1565C0"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "br.com.dunorte.promotores",
+      "icon": "./assets/appstore.png",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Precisamos da sua localização para registrar visitas e rotas de promotor.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Precisamos da sua localização para registrar visitas e rotas de promotor.",
@@ -21,6 +28,11 @@
     },
     "android": {
       "package": "br.com.dunorte.promotores",
+      "icon": "./assets/playstore.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/playstore.png",
+        "backgroundColor": "#1565C0"
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -34,7 +46,8 @@
       ]
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/Assets.xcassets/AppIcon.appiconset/_/64.png"
     },
     "plugins": [
       "expo-router",
