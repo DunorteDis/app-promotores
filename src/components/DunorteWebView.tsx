@@ -284,6 +284,7 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         geolocationEnabled
         thirdPartyCookiesEnabled
         sharedCookiesEnabled
+        mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
       />
       <LoadingOverlay visible={loading} />
     </View>
