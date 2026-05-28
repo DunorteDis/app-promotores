@@ -27,7 +27,10 @@
         "NSMicrophoneUsageDescription": "Necessário para capturar fotos e vídeos nas visitas.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "2"
+      "buildNumber": "2",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "br.com.dunorte.promotores",
