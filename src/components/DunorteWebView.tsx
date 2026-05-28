@@ -21,7 +21,7 @@ import {
 import { LoadingOverlay } from './LoadingOverlay';
 import { OfflineBanner } from './OfflineBanner';
 
-const TARGET_URL = 'https://promotores.dunorte.com.br';
+const TARGET_URL = 'https://vexo.dunorte.com.br';
 
 type Props = {
   onOnlineChange?: (online: boolean) => void;
