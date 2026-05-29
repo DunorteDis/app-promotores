@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Vexo",
-    "slug": "app-vexo-dunorte",
+    "slug": "vexo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon_transparent.png",
@@ -74,7 +74,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "1f3d01d6-317b-4437-9bab-aefdd493fd6c"
+        "projectId": "e184325c-6e10-4e3d-95e0-7d2800aae76b"
       }
     },
     "owner": "edbr0"
