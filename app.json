@@ -4,6 +4,7 @@
     "slug": "vexo",
     "version": "1.0.0",
     "orientation": "portrait",
+    "platforms": ["ios", "android"],
     "icon": "./assets/icon_transparent.png",
     "scheme": "dunortevexo",
     "userInterfaceStyle": "automatic",
