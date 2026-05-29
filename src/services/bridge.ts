@@ -11,7 +11,9 @@ export type BridgeRequest = {
     | 'network.subscribe'
     | 'network.unsubscribe'
     | 'notifications.requestPermission'
-    | 'notifications.schedule';
+    | 'notifications.schedule'
+    | 'media.capture'
+    | 'media.pick';
   payload?: Record<string, unknown>;
 };
 
@@ -103,6 +105,58 @@ export const INJECTED_JS = `
 
   document.addEventListener('message', function (e) { handleMessage(e.data); });
   window.addEventListener('message', function (e) { handleMessage(e.data); });
+
+  // --- File input interception ---
+  // Intercepts <input type="file"> clicks so the native image picker handles them
+  // instead of the WebView's (broken) file chooser. Files are returned as base64
+  // and injected back into the input via DataTransfer so React sees the change.
+  var _pendingFileInput = null;
+
+  function injectFilesIntoInput(input, files) {
+    try {
+      var dt = new DataTransfer();
+      for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var byteStr = atob(f.base64 || '');
+        var ab = new ArrayBuffer(byteStr.length);
+        var view = new Uint8Array(ab);
+        for (var j = 0; j < byteStr.length; j++) view[j] = byteStr.charCodeAt(j);
+        dt.items.add(new File([ab], f.fileName || 'photo.jpg', { type: f.mimeType || 'image/jpeg' }));
+      }
+      try {
+        Object.defineProperty(input, 'files', { value: dt.files, configurable: true });
+      } catch (e2) { /* noop */ }
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (e) { /* noop */ }
+  }
+
+  function handleFileInput(input) {
+    var wantsCamera = input.hasAttribute('capture');
+    var id = nextId();
+    _pendingFileInput = input;
+    pending[id] = {
+      resolve: function (data) {
+        if (data && data.files && data.files.length > 0 && _pendingFileInput) {
+          injectFilesIntoInput(_pendingFileInput, data.files);
+        }
+        _pendingFileInput = null;
+      },
+      reject: function () { _pendingFileInput = null; },
+    };
+    post({ id: id, type: wantsCamera ? 'media.capture' : 'media.pick', payload: { multiple: !!input.multiple } });
+  }
+
+  document.addEventListener('click', function (e) {
+    var el = e.target;
+    while (el) {
+      if (el.tagName === 'INPUT' && el.type === 'file') break;
+      el = el.parentElement;
+    }
+    if (!el) return;
+    e.preventDefault();
+    handleFileInput(el);
+  }, true);
 
   // --- Battery Status API polyfill ---
   // iOS/WebKit não implementa navigator.getBattery(). Fazemos um shim que

@@ -11,6 +11,7 @@ import {
   BridgeResponse,
   INJECTED_JS,
 } from '@/services/bridge';
+import { captureImage, pickImages } from '@/services/media';
 import { getCurrentLocation, requestLocationPermission, watchLocation } from '@/services/location';
 import { getNetworkSnapshot, subscribeNetwork } from '@/services/network';
 import {
@@ -171,6 +172,25 @@ export function DunorteWebView({ onOnlineChange }: Props) {
               payload.data,
             );
             sendResponse({ id: req.id, ok: true, data: { notificationId } });
+            break;
+          }
+          case 'media.capture': {
+            const captureResult = await captureImage();
+            sendResponse({
+              id: req.id,
+              ok: true,
+              data: { files: captureResult.ok ? captureResult.files : [] },
+            });
+            break;
+          }
+          case 'media.pick': {
+            const multiple = Boolean(req.payload?.multiple);
+            const pickResult = await pickImages(multiple);
+            sendResponse({
+              id: req.id,
+              ok: true,
+              data: { files: pickResult.ok ? pickResult.files : [] },
+            });
             break;
           }
           default:

@@ -29,6 +29,7 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Precisamos da sua localização para registrar visitas e rotas de promotor.",
         "NSCameraUsageDescription": "Necessário para capturar fotos nas visitas.",
         "NSMicrophoneUsageDescription": "Necessário para capturar fotos e vídeos nas visitas.",
+        "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos da galeria nas visitas.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "buildNumber": "4",
@@ -66,7 +67,8 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
-      ]
+      ],
+      "versionCode": 2
     },
     "plugins": [
       "expo-router",
@@ -77,7 +79,14 @@
         }
       ],
       "expo-notifications",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O aplicativo acessa suas fotos para registrar visitas.",
+          "cameraPermission": "O aplicativo usa a câmera para registrar fotos das visitas."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
