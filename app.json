@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "Vexo",
-    "slug": "app-promotores-dunorte",
+    "slug": "app-vexo-dunorte",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon_transparent.png",
-    "scheme": "dunortepromotores",
+    "scheme": "dunortevexo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -18,7 +18,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "br.com.dunorte.promotores",
+      "bundleIdentifier": "br.com.dunorte.vexo",
       "icon": "./assets/icon_transparent.png",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Precisamos da sua localização para registrar visitas e rotas de promotor.",
@@ -27,13 +27,13 @@
         "NSMicrophoneUsageDescription": "Necessário para capturar fotos e vídeos nas visitas.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "2",
+      "buildNumber": "3",
       "config": {
         "usesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "br.com.dunorte.promotores",
+      "package": "br.com.dunorte.vexo",
       "icon": "./assets/icon_transparent.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/playstore_adaptive_fg.png",
