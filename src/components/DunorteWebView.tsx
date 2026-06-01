@@ -11,7 +11,7 @@ import {
   BridgeResponse,
   INJECTED_JS,
 } from '@/services/bridge';
-import { captureImage, pickImages } from '@/services/media';
+import { captureImage, openFile, pickImages, type MediaFile } from '@/services/media';
 import { getCurrentLocation, requestLocationPermission, watchLocation } from '@/services/location';
 import { getNetworkSnapshot, subscribeNetwork } from '@/services/network';
 import {
@@ -19,6 +19,7 @@ import {
   scheduleLocalNotification,
 } from '@/services/notifications';
 
+import { CameraSession } from './CameraSession';
 import { LoadingOverlay } from './LoadingOverlay';
 import { OfflineBanner } from './OfflineBanner';
 
@@ -41,6 +42,20 @@ export function DunorteWebView({ onOnlineChange }: Props) {
   const locationSubRef = useRef<LocationSubscription | null>(null);
   const firstLoadDoneRef = useRef(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sessão de câmera nativa multi-shot (ponte: media.captureSession).
+  const [cameraSession, setCameraSession] = useState<{
+    visible: boolean;
+    maxFotos: number;
+    initialCount: number;
+  }>({ visible: false, maxFotos: 1, initialCount: 0 });
+  const sessionResolveRef = useRef<((files: MediaFile[]) => void) | null>(null);
+
+  const handleSessionClose = useCallback((files: MediaFile[]) => {
+    sessionResolveRef.current?.(files);
+    sessionResolveRef.current = null;
+    setCameraSession((prev) => ({ ...prev, visible: false }));
+  }, []);
 
   const clearLoadingTimeout = useCallback(() => {
     if (loadingTimeoutRef.current) {
@@ -193,6 +208,40 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             });
             break;
           }
+          case 'media.captureSession': {
+            const payload = (req.payload ?? {}) as { maxFotos?: number; initialCount?: number };
+            const maxFotos = Math.max(1, Math.min(50, Number(payload.maxFotos) || 5));
+            const initialCount = Math.max(0, Number(payload.initialCount) || 0);
+
+            // Se já tem uma sessão pendente (não deveria), encerra a antiga com array vazio
+            // pra não deixar o caller pendurado.
+            sessionResolveRef.current?.([]);
+
+            const files = await new Promise<MediaFile[]>((resolve) => {
+              sessionResolveRef.current = resolve;
+              setCameraSession({ visible: true, maxFotos, initialCount });
+            });
+            sendResponse({ id: req.id, ok: true, data: { files } });
+            break;
+          }
+          case 'media.openFile': {
+            const payload = (req.payload ?? {}) as {
+              base64?: string;
+              mimeType?: string;
+              fileName?: string;
+            };
+            const result = await openFile({
+              base64: payload.base64 ?? '',
+              mimeType: payload.mimeType,
+              fileName: payload.fileName,
+            });
+            if (result.ok) {
+              sendResponse({ id: req.id, ok: true, data: { opened: true } });
+            } else {
+              sendResponse({ id: req.id, ok: false, error: result.error });
+            }
+            break;
+          }
           default:
             sendResponse({ id: req.id, ok: false, error: `Tipo desconhecido: ${req.type}` });
         }
@@ -307,6 +356,12 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
       />
       <LoadingOverlay visible={loading} />
+      <CameraSession
+        visible={cameraSession.visible}
+        maxFotos={cameraSession.maxFotos}
+        initialCount={cameraSession.initialCount}
+        onClose={handleSessionClose}
+      />
     </View>
   );
 }

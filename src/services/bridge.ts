@@ -13,7 +13,9 @@ export type BridgeRequest = {
     | 'notifications.requestPermission'
     | 'notifications.schedule'
     | 'media.capture'
-    | 'media.pick';
+    | 'media.pick'
+    | 'media.captureSession'
+    | 'media.openFile';
   payload?: Record<string, unknown>;
 };
 
@@ -93,6 +95,8 @@ export const INJECTED_JS = `
     unsubscribeNetwork: function () { return request('network.unsubscribe'); },
     requestNotificationPermission: function () { return request('notifications.requestPermission'); },
     scheduleNotification: function (payload) { return request('notifications.schedule', payload); },
+    captureSession: function (payload) { return request('media.captureSession', payload || {}); },
+    openFile: function (payload) { return request('media.openFile', payload || {}); },
     on: function (event, cb) {
       if (!listeners[event]) listeners[event] = [];
       listeners[event].push(cb);

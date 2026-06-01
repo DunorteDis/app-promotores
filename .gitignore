@@ -17,9 +17,9 @@ web-build/
 .env
 .env.local
 
-# Native
-./android/
-ios/
+# Native (gerados por `expo prebuild` — reconstruídos a partir do app.json + plugins)
+/android/
+/ios/
 
 # Logs
 *.log
