@@ -21,6 +21,10 @@ web-build/
 /android/
 /ios/
 
+# IDEs
+.idea/
+.vscode/
+
 # Logs
 *.log
 

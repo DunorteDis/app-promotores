@@ -29,6 +29,15 @@ type Mode = 'camera' | 'confirm';
 // substring em runtime — funciona em PT/EN e nas variações de iOS.
 type LensKind = 'wide' | 'ultraWide' | 'telephoto';
 
+// iPhones modernos expõem TANTO lentes físicas (Back Camera, Back Ultra Wide
+// Camera, Back Telephoto Camera) QUANTO lentes virtuais que fundem múltiplos
+// sensores (Back Dual Camera, Back Dual Wide Camera, Back Triple Camera).
+// As virtuais não respeitam `zoom=0` como "1x exato" — elas fundem sensores e
+// o framing fica levemente deslocado. Por isso preferimos lentes físicas.
+function isVirtualLens(name: string): boolean {
+  return /\b(dual|triple|fusion)\b/i.test(name);
+}
+
 function classifyLens(name: string): LensKind | null {
   const lower = name.toLowerCase();
   if (lower.includes('ultra')) return 'ultraWide';
@@ -292,21 +301,25 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
                 {...(Platform.OS === 'ios' && selectedLens ? { selectedLens } : {})}
                 onAvailableLensesChanged={({ lenses }: { lenses: string[] }) => {
                   if (Platform.OS !== 'ios') return;
-                  // Classifica cada lente reportada por substring no nome.
                   const next: Partial<Record<LensKind, string>> = {};
+                  // Pass 1: SÓ lentes físicas — virtuais (Dual/Triple/Fusion)
+                  // ficam por último porque dão framing levemente deslocado em 1x.
                   for (const name of lenses) {
+                    if (isVirtualLens(name)) continue;
                     const kind = classifyLens(name);
-                    // Prioriza o primeiro de cada tipo — evita sobrescrever
-                    // "Back Wide" com um "Back Camera" genérico depois.
                     if (kind && !next[kind]) next[kind] = name;
                   }
-                  // Fallback: se não achou nenhuma "wide", usa a primeira não-ultra.
+                  // Pass 2: preenche o que ficou faltando com virtuais.
+                  for (const name of lenses) {
+                    const kind = classifyLens(name);
+                    if (kind && !next[kind]) next[kind] = name;
+                  }
+                  // Fallback final: se não achou nenhuma "wide", usa a primeira não-ultra.
                   if (!next.wide) {
                     next.wide = lenses.find((n) => !n.toLowerCase().includes('ultra')) ?? lenses[0];
                   }
                   setLensMap(next);
-                  // Trava a wide como padrão no mount — sem isso o iPhone fica
-                  // no virtual "Back Camera" multi-cam, que vem em 0.5x.
+                  // Trava a wide física como padrão no mount.
                   if (!selectedLens && next.wide) {
                     setSelectedLens(next.wide);
                   }
