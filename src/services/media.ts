@@ -2,7 +2,7 @@ import { Alert, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import * as Linking from 'expo-linking';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 export type MediaFile = {
   base64: string;
@@ -116,21 +116,27 @@ export async function openFile(payload: {
       encoding: FileSystem.EncodingType.Base64,
     });
 
-    // No Android, usamos ACTION_VIEW via Linking.openURL com content:// URI.
-    // Isso lista APENAS apps que sabem ABRIR o arquivo (visualizadores de PDF,
-    // Drive, etc.) — sem opções de "compartilhar" tipo email/WhatsApp, que
-    // o Sharing.shareAsync (ACTION_SEND) trazia e confundia o usuário.
+    // No Android, usamos ACTION_VIEW via IntentLauncher.startActivityAsync com
+    // content:// URI e flag FLAG_GRANT_READ_URI_PERMISSION (=1). Isso lista
+    // APENAS apps que sabem ABRIR o arquivo (visualizadores de PDF, Drive, etc.)
+    // — sem opções de "compartilhar" tipo email/WhatsApp, que o Sharing.shareAsync
+    // (ACTION_SEND) trazia e confundia o usuário.
+    //
+    // Importante: o `flags: 1` é obrigatório. Sem ele, o leitor escolhido recebe
+    // o content URI mas é bloqueado pelo Android ao tentar ler ("arquivo não
+    // existe" ou voltar pra tela anterior sem abrir). Linking.openURL não
+    // permite passar flags — por isso precisamos do expo-intent-launcher aqui.
     if (Platform.OS === 'android') {
       try {
         const contentUri = await FileSystem.getContentUriAsync(fileUri);
-        const canOpen = await Linking.canOpenURL(contentUri);
-        if (canOpen) {
-          await Linking.openURL(contentUri);
-          return { ok: true };
-        }
-        // Sem app pra visualizar — cai pro Sharing como fallback final.
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          type: payload.mimeType || undefined,
+          flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+        });
+        return { ok: true };
       } catch {
-        // Falha no Linking — fallback pro Sharing.
+        // Falha (sem app pra visualizar, etc.) — fallback pro Sharing.
       }
     }
 

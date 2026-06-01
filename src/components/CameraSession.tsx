@@ -23,12 +23,38 @@ type Props = {
 
 type Mode = 'camera' | 'confirm';
 
-// iOS expõe lentes físicas via getAvailableLensesAsync / onAvailableLensesChanged.
-// Android não — `expo-camera` só dá acesso ao "back camera" lógico (com zoom digital).
-const IOS_LENS_ULTRA_WIDE = 'builtInUltraWideCamera';
-const IOS_LENS_WIDE = 'builtInWideAngleCamera';
+// expo-camera no iOS retorna `localizedName` do AVCaptureDevice (ex.:
+// "Back Camera", "Back Ultra Wide Camera", "Back Telephoto Camera"),
+// não os constants tipo `builtInWideAngleCamera`. A gente classifica por
+// substring em runtime — funciona em PT/EN e nas variações de iOS.
+type LensKind = 'wide' | 'ultraWide' | 'telephoto';
 
-type ZoomPill = { label: string; zoom: number; lens?: string };
+function classifyLens(name: string): LensKind | null {
+  const lower = name.toLowerCase();
+  if (lower.includes('ultra')) return 'ultraWide';
+  if (lower.includes('tele')) return 'telephoto';
+  if (lower.includes('wide') || lower.includes('back camera')) return 'wide';
+  return null;
+}
+
+type ZoomPill = { label: string; zoom: number; lensKind?: LensKind };
+
+// Régua de zoom — dimensões em px. Largura calibrada pra caber confortável no
+// footer (~70% de uma tela 360dp) e dar precisão suficiente no arrasto.
+const RAIL_WIDTH = 220;
+const RAIL_HEIGHT = 4;
+const RAIL_THUMB = 12;
+
+// expo-camera trata `zoom={0..1}` como percentual do MÁXIMO do device, que em
+// celular moderno é 10x-25x. Daí zoom=0.5 vira tipo 5x-12x ("parece 10x"),
+// não 2x. As constantes abaixo recalibram pro nosso uso (promotor tirando
+// foto de gôndola — raramente precisa passar de ~3-4x).
+//
+// Valores calibrados empiricamente: em devices testados, zoom abaixo de ~0.09
+// é imperceptível (parece 1x). Por isso ZOOM_2X precisa ficar bem acima desse
+// limiar pra "2x" ser visivelmente diferente de "1x".
+const ZOOM_2X = 0.25;         // ≈2x perceptual em devices com max 10-15x
+const RAIL_MAX_ZOOM = 0.5;    // ≈5x — limite útil da régua (dead zone vira ~18%)
 
 /**
  * Tela nativa de câmera multi-shot. Layout estilo "câmera Foto 4:3" do sistema:
@@ -52,10 +78,11 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
 
   // Zoom (0–1, percentual do zoom DIGITAL — funciona em ambos os SOs).
   const [zoom, setZoom] = useState(0);
-  // iOS only: lente atualmente selecionada (wide / ultraWide / telephoto).
+  // iOS only: lente atualmente selecionada (nome do AVCaptureDevice).
   const [selectedLens, setSelectedLens] = useState<string | undefined>(undefined);
-  // iOS only: lentes detectadas pelo onAvailableLensesChanged.
-  const [availableLenses, setAvailableLenses] = useState<string[]>([]);
+  // iOS only: mapa "tipo de lente → nome real reportado pelo SO".
+  // Resolvido via classifyLens(name) quando onAvailableLensesChanged dispara.
+  const [lensMap, setLensMap] = useState<Partial<Record<LensKind, string>>>({});
 
   useEffect(() => {
     if (visible) {
@@ -67,7 +94,7 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
       setCapturing(false);
       setZoom(0);
       setSelectedLens(undefined);
-      setAvailableLenses([]);
+      setLensMap({});
     }
   }, [visible, initialCount]);
 
@@ -81,19 +108,20 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
   // a câmera atual EXPÕE a ultra-wide (só iOS — Android não tem essa API).
   const zoomPills = useMemo<ZoomPill[]>(() => {
     const pills: ZoomPill[] = [];
-    const hasUltraWide = Platform.OS === 'ios' && availableLenses.includes(IOS_LENS_ULTRA_WIDE);
-    if (hasUltraWide) pills.push({ label: '0.5x', zoom: 0, lens: IOS_LENS_ULTRA_WIDE });
-    pills.push({ label: '1x', zoom: 0, lens: Platform.OS === 'ios' ? IOS_LENS_WIDE : undefined });
-    pills.push({ label: '2x', zoom: 0.5, lens: Platform.OS === 'ios' ? IOS_LENS_WIDE : undefined });
+    if (Platform.OS === 'ios' && lensMap.ultraWide) {
+      pills.push({ label: '0.5x', zoom: 0, lensKind: 'ultraWide' });
+    }
+    pills.push({ label: '1x', zoom: 0, lensKind: 'wide' });
+    pills.push({ label: '2x', zoom: ZOOM_2X, lensKind: 'wide' });
     return pills;
-  }, [availableLenses]);
+  }, [lensMap.ultraWide]);
 
   // Qual pill está "ativa" agora (pra destacar visualmente).
   const activePillLabel = useMemo(() => {
-    if (Platform.OS === 'ios' && selectedLens === IOS_LENS_ULTRA_WIDE) return '0.5x';
-    if (zoom >= 0.4) return '2x';
+    if (Platform.OS === 'ios' && selectedLens && selectedLens === lensMap.ultraWide) return '0.5x';
+    if (zoom >= ZOOM_2X * 0.6) return '2x'; // ~ ponto médio entre 1x e 2x
     return '1x';
-  }, [zoom, selectedLens]);
+  }, [zoom, selectedLens, lensMap.ultraWide]);
 
   const handleShutter = useCallback(async () => {
     if (!cameraRef.current || capturing) return;
@@ -145,10 +173,16 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
     onClose(photos);
   }, [onClose, photos]);
 
-  const handlePillPress = useCallback((pill: ZoomPill) => {
-    setZoom(pill.zoom);
-    if (Platform.OS === 'ios') setSelectedLens(pill.lens);
-  }, []);
+  const handlePillPress = useCallback(
+    (pill: ZoomPill) => {
+      setZoom(pill.zoom);
+      if (Platform.OS === 'ios' && pill.lensKind) {
+        const lensName = lensMap[pill.lensKind];
+        if (lensName) setSelectedLens(lensName);
+      }
+    },
+    [lensMap],
+  );
 
   // --- Pinch to zoom (dois dedos) ---
   // Mantém uma ref espelhada do zoom atual pra ler dentro do callback do gesto
@@ -169,6 +203,24 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
         .onUpdate((e) => {
           const next = Math.max(0, Math.min(1, baseZoomAtPinchStart.current + (e.scale - 1) * 0.5));
           setZoom(next);
+        }),
+    [],
+  );
+
+  // --- Régua de zoom (Pan horizontal) ---
+  // Mapeia x → zoom 0..RAIL_MAX_ZOOM (faixa útil, ~1x-3.5x). Pinch pode ir
+  // além; thumb da régua só cápeia visualmente no fim.
+  const railPanGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .onBegin((e) => {
+          const x = Math.max(0, Math.min(RAIL_WIDTH, e.x));
+          setZoom((x / RAIL_WIDTH) * RAIL_MAX_ZOOM);
+        })
+        .onUpdate((e) => {
+          const x = Math.max(0, Math.min(RAIL_WIDTH, e.x));
+          setZoom((x / RAIL_WIDTH) * RAIL_MAX_ZOOM);
         }),
     [],
   );
@@ -239,7 +291,25 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
                 enableTorch={torchOn}
                 {...(Platform.OS === 'ios' && selectedLens ? { selectedLens } : {})}
                 onAvailableLensesChanged={({ lenses }: { lenses: string[] }) => {
-                  setAvailableLenses(lenses);
+                  if (Platform.OS !== 'ios') return;
+                  // Classifica cada lente reportada por substring no nome.
+                  const next: Partial<Record<LensKind, string>> = {};
+                  for (const name of lenses) {
+                    const kind = classifyLens(name);
+                    // Prioriza o primeiro de cada tipo — evita sobrescrever
+                    // "Back Wide" com um "Back Camera" genérico depois.
+                    if (kind && !next[kind]) next[kind] = name;
+                  }
+                  // Fallback: se não achou nenhuma "wide", usa a primeira não-ultra.
+                  if (!next.wide) {
+                    next.wide = lenses.find((n) => !n.toLowerCase().includes('ultra')) ?? lenses[0];
+                  }
+                  setLensMap(next);
+                  // Trava a wide como padrão no mount — sem isso o iPhone fica
+                  // no virtual "Back Camera" multi-cam, que vem em 0.5x.
+                  if (!selectedLens && next.wide) {
+                    setSelectedLens(next.wide);
+                  }
                 }}
               />
               {mode === 'confirm' && preview && (
@@ -257,6 +327,24 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
         <View style={styles.footer}>
           {mode === 'camera' ? (
             <>
+              {/* Régua de zoom discreta — track fininho com thumb arrastável.
+                  Atualiza com pinch e pills. Cápeia o thumb no fim da régua
+                  quando zoom ultrapassa RAIL_MAX_ZOOM (pinch indo além). */}
+              <GestureDetector gesture={railPanGesture}>
+                <View style={styles.railHit} hitSlop={12}>
+                  <View style={styles.railTrack}>
+                    {(() => {
+                      const railPos = Math.min(1, zoom / RAIL_MAX_ZOOM) * RAIL_WIDTH;
+                      return (
+                        <>
+                          <View style={[styles.railFill, { width: railPos }]} />
+                          <View style={[styles.railThumb, { left: railPos - RAIL_THUMB / 2 }]} />
+                        </>
+                      );
+                    })()}
+                  </View>
+                </View>
+              </GestureDetector>
               {/* Pills de zoom */}
               {zoomPills.length > 1 && (
                 <View style={styles.pillsRow}>
@@ -371,6 +459,35 @@ const styles = StyleSheet.create({
     minHeight: 150,
     justifyContent: 'center',
     gap: 14,
+  },
+
+  // Régua de zoom
+  railHit: {
+    paddingVertical: 10, // hit area maior pra arrastar sem precisar de mira
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  railTrack: {
+    width: RAIL_WIDTH,
+    height: RAIL_HEIGHT,
+    borderRadius: RAIL_HEIGHT / 2,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    position: 'relative',
+  },
+  railFill: {
+    height: RAIL_HEIGHT,
+    borderRadius: RAIL_HEIGHT / 2,
+    backgroundColor: 'rgba(250,204,21,0.55)', // âmbar suave, discreto
+  },
+  railThumb: {
+    position: 'absolute',
+    top: (RAIL_HEIGHT - RAIL_THUMB) / 2,
+    width: RAIL_THUMB,
+    height: RAIL_THUMB,
+    borderRadius: RAIL_THUMB / 2,
+    backgroundColor: '#FACC15',
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.35)',
   },
 
   // Zoom pills
