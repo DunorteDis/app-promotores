@@ -32,7 +32,8 @@ export type BridgeEvent = {
     | 'location.update'
     | 'network.update'
     | 'notification.received'
-    | 'notification.response';
+    | 'notification.response'
+    | 'media.photo';
   data: unknown;
 };
 

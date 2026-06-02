@@ -44,11 +44,15 @@ export function DunorteWebView({ onOnlineChange }: Props) {
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sessão de câmera nativa multi-shot (ponte: media.captureSession).
+  // `streamPhotos`: quando o caller envia true, emitimos um evento `media.photo`
+  // por foto confirmada e retornamos array vazio no resolve final — assim o
+  // caller pode iniciar upload em paralelo e não duplica processamento.
   const [cameraSession, setCameraSession] = useState<{
     visible: boolean;
     maxFotos: number;
     initialCount: number;
-  }>({ visible: false, maxFotos: 1, initialCount: 0 });
+    streamPhotos: boolean;
+  }>({ visible: false, maxFotos: 1, initialCount: 0, streamPhotos: false });
   const sessionResolveRef = useRef<((files: MediaFile[]) => void) | null>(null);
 
   const handleSessionClose = useCallback((files: MediaFile[]) => {
@@ -209,9 +213,14 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             break;
           }
           case 'media.captureSession': {
-            const payload = (req.payload ?? {}) as { maxFotos?: number; initialCount?: number };
+            const payload = (req.payload ?? {}) as {
+              maxFotos?: number;
+              initialCount?: number;
+              streamPhotos?: boolean;
+            };
             const maxFotos = Math.max(1, Math.min(50, Number(payload.maxFotos) || 5));
             const initialCount = Math.max(0, Number(payload.initialCount) || 0);
+            const streamPhotos = Boolean(payload.streamPhotos);
 
             // Se já tem uma sessão pendente (não deveria), encerra a antiga com array vazio
             // pra não deixar o caller pendurado.
@@ -219,9 +228,15 @@ export function DunorteWebView({ onOnlineChange }: Props) {
 
             const files = await new Promise<MediaFile[]>((resolve) => {
               sessionResolveRef.current = resolve;
-              setCameraSession({ visible: true, maxFotos, initialCount });
+              setCameraSession({ visible: true, maxFotos, initialCount, streamPhotos });
             });
-            sendResponse({ id: req.id, ok: true, data: { files } });
+            // Em modo stream, as fotos já foram entregues uma a uma via evento
+            // 'media.photo' — devolve array vazio pra evitar processamento dobrado.
+            sendResponse({
+              id: req.id,
+              ok: true,
+              data: { files: streamPhotos ? [] : files },
+            });
             break;
           }
           case 'media.openFile': {
@@ -361,6 +376,11 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         maxFotos={cameraSession.maxFotos}
         initialCount={cameraSession.initialCount}
         onClose={handleSessionClose}
+        onPhotoConfirmed={
+          cameraSession.streamPhotos
+            ? (file) => sendEvent({ event: 'media.photo', data: file })
+            : undefined
+        }
       />
     </View>
   );

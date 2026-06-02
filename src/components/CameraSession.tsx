@@ -19,6 +19,9 @@ type Props = {
   maxFotos: number;
   initialCount: number;
   onClose: (files: MediaFile[]) => void;
+  // Disparado quando o usuário confirma cada foto ("Usar foto"). Permite o
+  // caller começar o upload imediatamente em vez de esperar o `onClose` final.
+  onPhotoConfirmed?: (file: MediaFile) => void;
 };
 
 type Mode = 'camera' | 'confirm';
@@ -64,6 +67,7 @@ const RAIL_THUMB = 12;
 // limiar pra "2x" ser visivelmente diferente de "1x".
 const ZOOM_2X = 0.25;         // ≈2x perceptual em devices com max 10-15x
 const RAIL_MAX_ZOOM = 0.5;    // ≈5x — limite útil da régua (dead zone vira ~18%)
+const FOCUS_MARKER_SIZE = 64; // px — quadrado amarelo de feedback do tap-to-focus
 
 /**
  * Tela nativa de câmera multi-shot. Layout estilo "câmera Foto 4:3" do sistema:
@@ -75,7 +79,7 @@ const RAIL_MAX_ZOOM = 0.5;    // ≈5x — limite útil da régua (dead zone vir
  *   → volta pro viewfinder, sem fechar a tela. Encerra ao bater o limite
  *   ou ao tocar em × Encerrar.
  */
-export function CameraSession({ visible, maxFotos, initialCount, onClose }: Props) {
+export function CameraSession({ visible, maxFotos, initialCount, onClose, onPhotoConfirmed }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [mode, setMode] = useState<Mode>('camera');
@@ -84,6 +88,10 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
   const [preview, setPreview] = useState<{ uri: string; file: MediaFile } | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  // iOS: força `pictureSize` 4:3 pra o preset da sessão ser .photo (4:3) e o
+  // preview enquadrar igual à câmera nativa em modo 4:3 (não 16:9). O prop
+  // `ratio` é Android-only — no iOS precisa ser via pictureSize.
+  const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
 
   // Zoom (0–1, percentual do zoom DIGITAL — funciona em ambos os SOs).
   const [zoom, setZoom] = useState(0);
@@ -104,6 +112,7 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
       setZoom(0);
       setSelectedLens(undefined);
       setLensMap({});
+      setPictureSize(undefined);
     }
   }, [visible, initialCount]);
 
@@ -161,6 +170,9 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
 
   const handleUsePhoto = useCallback(() => {
     if (!preview) return;
+    // Dispara IMEDIATAMENTE pra o caller começar o upload em paralelo enquanto
+    // o usuário tira a próxima foto (corta o delay no final da sessão).
+    onPhotoConfirmed?.(preview.file);
     const nextPhotos = [...photos, preview.file];
     const nextCount = count + 1;
     setPhotos(nextPhotos);
@@ -171,7 +183,7 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
     } else {
       setMode('camera');
     }
-  }, [preview, photos, count, maxFotos, onClose]);
+  }, [preview, photos, count, maxFotos, onClose, onPhotoConfirmed]);
 
   const handleRetake = useCallback(() => {
     setPreview(null);
@@ -214,6 +226,40 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
           setZoom(next);
         }),
     [],
+  );
+
+  // --- Tap-to-focus ---
+  // expo-camera v17 não expõe API pra setar ponto de foco específico
+  // (`pointOfInterest`). Com `autofocus="on"` já temos foco contínuo, e o
+  // próprio ato de tocar/mexer o enquadramento força um re-foco. Aqui
+  // adicionamos só o feedback visual (quadrado amarelo onde o usuário tocou)
+  // pra a UX ficar igual a câmera nativa.
+  const [focusMarker, setFocusMarker] = useState<{ x: number; y: number } | null>(null);
+  const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+    },
+    [],
+  );
+
+  const tapGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .runOnJS(true)
+        .onEnd((e) => {
+          setFocusMarker({ x: e.x, y: e.y });
+          if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+          focusTimeoutRef.current = setTimeout(() => setFocusMarker(null), 900);
+        }),
+    [],
+  );
+
+  // Pinch (2 dedos) e Tap (1 dedo) podem rolar ao mesmo tempo sem conflito.
+  const cameraBoxGesture = useMemo(
+    () => Gesture.Simultaneous(pinchGesture, tapGesture),
+    [pinchGesture, tapGesture],
   );
 
   // --- Régua de zoom (Pan horizontal) ---
@@ -287,9 +333,10 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
         </View>
 
         {/* Camera area — viewfinder 3:4 portrait centralizado.
-            Pinch (dois dedos) ajusta o zoom dentro da janela. */}
+            Pinch (dois dedos) ajusta o zoom; tap (um dedo) mostra o marker
+            de foco e ajuda o autofocus contínuo a re-engajar. */}
         <View style={styles.cameraArea}>
-          <GestureDetector gesture={pinchGesture}>
+          <GestureDetector gesture={cameraBoxGesture}>
             <View style={styles.cameraBox}>
               <CameraView
                 ref={cameraRef}
@@ -297,8 +344,10 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
                 facing="back"
                 ratio="4:3"
                 zoom={zoom}
+                autofocus="on"
                 enableTorch={torchOn}
                 {...(Platform.OS === 'ios' && selectedLens ? { selectedLens } : {})}
+                {...(Platform.OS === 'ios' && pictureSize ? { pictureSize } : {})}
                 onAvailableLensesChanged={({ lenses }: { lenses: string[] }) => {
                   if (Platform.OS !== 'ios') return;
                   const next: Partial<Record<LensKind, string>> = {};
@@ -319,9 +368,43 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
                     next.wide = lenses.find((n) => !n.toLowerCase().includes('ultra')) ?? lenses[0];
                   }
                   setLensMap(next);
-                  // Trava a wide física como padrão no mount.
+                  // Trava a wide física como padrão. A troca de lente acontece
+                  // atrás do overlay preto (previewReady=false até onCameraReady
+                  // + delay), então o usuário não vê o flash do iOS default.
                   if (!selectedLens && next.wide) {
                     setSelectedLens(next.wide);
+                  }
+                }}
+                onCameraReady={async () => {
+                  // iOS: consulta os pictureSizes disponíveis e seta um 4:3
+                  // maior. Isso muda o preset da sessão pra .photo (4:3) e o
+                  // preview reconfigura pra enquadrar igual à câmera nativa
+                  // em 4:3 (não 16:9). Best-effort: se falhar, segue com o
+                  // preset default do expo-camera.
+                  if (Platform.OS === 'ios' && !pictureSize) {
+                    try {
+                      const sizes = await cameraRef.current?.getAvailablePictureSizesAsync?.();
+                      if (sizes && sizes.length > 0) {
+                        const fourThree = sizes
+                          .map((s) => {
+                            const m = s.match(/^(\d+)x(\d+)$/);
+                            if (!m) return null;
+                            const w = parseInt(m[1], 10);
+                            const h = parseInt(m[2], 10);
+                            return { s, w, ratio: w / h };
+                          })
+                          .filter(
+                            (x): x is { s: string; w: number; ratio: number } =>
+                              x !== null && Math.abs(x.ratio - 4 / 3) < 0.02,
+                          )
+                          .sort((a, b) => b.w - a.w);
+                        if (fourThree.length > 0) {
+                          setPictureSize(fourThree[0].s);
+                        }
+                      }
+                    } catch {
+                      // ignora
+                    }
                   }
                 }}
               />
@@ -330,6 +413,16 @@ export function CameraSession({ visible, maxFotos, initialCount, onClose }: Prop
                   source={{ uri: preview.uri }}
                   style={StyleSheet.absoluteFill}
                   resizeMode="cover"
+                />
+              )}
+              {/* Marker de foco — aparece onde o usuário tocou e some em 900ms */}
+              {focusMarker && mode === 'camera' && (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.focusMarker,
+                    { left: focusMarker.x - FOCUS_MARKER_SIZE / 2, top: focusMarker.y - FOCUS_MARKER_SIZE / 2 },
+                  ]}
                 />
               )}
             </View>
@@ -461,6 +554,17 @@ const styles = StyleSheet.create({
     aspectRatio: 3 / 4,
     overflow: 'hidden',
     backgroundColor: '#000',
+  },
+
+  // Tap-to-focus marker — quadrado amarelo translúcido com borda
+  focusMarker: {
+    position: 'absolute',
+    width: FOCUS_MARKER_SIZE,
+    height: FOCUS_MARKER_SIZE,
+    borderWidth: 2,
+    borderColor: '#FACC15',
+    borderRadius: 6,
+    backgroundColor: 'rgba(250,204,21,0.08)',
   },
 
   // Footer
