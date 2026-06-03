@@ -12,6 +12,7 @@ import {
   INJECTED_JS,
 } from '@/services/bridge';
 import { captureImage, openFile, pickImages, type MediaFile } from '@/services/media';
+import { cancelAppUpdate, downloadAndInstallApk } from '@/services/appUpdate';
 import { getCurrentLocation, requestLocationPermission, watchLocation } from '@/services/location';
 import { getNetworkSnapshot, subscribeNetwork } from '@/services/network';
 import {
@@ -255,6 +256,28 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             } else {
               sendResponse({ id: req.id, ok: false, error: result.error });
             }
+            break;
+          }
+          case 'app.downloadUpdate': {
+            const payload = (req.payload ?? {}) as { url?: string };
+            const url = String(payload.url ?? '').trim();
+            if (!url) {
+              sendResponse({ id: req.id, ok: false, error: 'URL da atualização ausente.' });
+              break;
+            }
+            const result = await downloadAndInstallApk(url, (progress) =>
+              sendEvent({ event: 'app.downloadProgress', data: progress }),
+            );
+            if (result.ok) {
+              sendResponse({ id: req.id, ok: true, data: { installed: true } });
+            } else {
+              sendResponse({ id: req.id, ok: false, error: result.error });
+            }
+            break;
+          }
+          case 'app.cancelUpdate': {
+            cancelAppUpdate();
+            sendResponse({ id: req.id, ok: true, data: { cancelled: true } });
             break;
           }
           default:

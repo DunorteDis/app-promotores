@@ -15,7 +15,9 @@ export type BridgeRequest = {
     | 'media.capture'
     | 'media.pick'
     | 'media.captureSession'
-    | 'media.openFile';
+    | 'media.openFile'
+    | 'app.downloadUpdate'
+    | 'app.cancelUpdate';
   payload?: Record<string, unknown>;
 };
 
@@ -33,7 +35,8 @@ export type BridgeEvent = {
     | 'network.update'
     | 'notification.received'
     | 'notification.response'
-    | 'media.photo';
+    | 'media.photo'
+    | 'app.downloadProgress';
   data: unknown;
 };
 
@@ -98,6 +101,8 @@ export const INJECTED_JS = `
     scheduleNotification: function (payload) { return request('notifications.schedule', payload); },
     captureSession: function (payload) { return request('media.captureSession', payload || {}); },
     openFile: function (payload) { return request('media.openFile', payload || {}); },
+    downloadUpdate: function (payload) { return request('app.downloadUpdate', payload || {}); },
+    cancelUpdate: function () { return request('app.cancelUpdate'); },
     on: function (event, cb) {
       if (!listeners[event]) listeners[event] = [];
       listeners[event].push(cb);
@@ -254,7 +259,7 @@ export const INJECTED_JS = `
     }
   } catch (e) { /* noop */ }
 
-  post({ event: 'bridge.ready', data: { version: 2, batteryPolyfill: true } });
+  post({ event: 'bridge.ready', data: { version: 3, batteryPolyfill: true, appUpdate: true } });
 })();
 true;
 `;
