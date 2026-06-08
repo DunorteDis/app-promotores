@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vexo",
     "slug": "vexo",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "platforms": [
       "ios",
@@ -22,7 +22,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "br.com.dunorte.vexo",
+      "bundleIdentifier": "br.com.dunorte.vexo.app",
       "icon": "./assets/icon_transparent.png",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Precisamos da sua localização para registrar visitas e rotas de promotor.",
@@ -32,7 +32,7 @@
         "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos da galeria nas visitas.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "4",
+      "buildNumber": "9",
       "config": {
         "usesNonExemptEncryption": false
       }
