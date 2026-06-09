@@ -358,10 +358,24 @@ export function CameraSessionVision({
                 resizeMode="cover"
               />
               {mode === 'confirm' && preview && (
+                // Backdrop preto opaco: o <Camera> acima continua montado (só
+                // inativo) e leva um instante pra apagar o último frame ao vivo.
+                // Como a Image abaixo usa `contain` (não preenche a caixa toda),
+                // sem esse backdrop o frame residual da câmera vazava nas tarjas
+                // e dava a impressão de imagem "espelhada"/duplicada.
+                <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.confirmBackdrop]} />
+              )}
+              {mode === 'confirm' && preview && (
+                // `contain` (não `cover`): a foto capturada pode ser paisagem
+                // (4:3) quando o usuário gira o celular, e a caixa do preview é
+                // 3:4 retrato. Com `cover` o preview cortava as laterais e dava
+                // a impressão de que a foto foi recortada — mas o arquivo salvo
+                // é o frame inteiro. `contain` mostra a foto INTEIRA (com tarja
+                // preta nas sobras) pra a confirmação bater com o que foi salvo.
                 <Image
                   source={{ uri: preview.uri }}
                   style={StyleSheet.absoluteFill}
-                  resizeMode="cover"
+                  resizeMode="contain"
                 />
               )}
               {focusMarker && mode === 'camera' && (
@@ -494,6 +508,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#000',
   },
+
+  confirmBackdrop: { backgroundColor: '#000' },
 
   focusMarker: {
     position: 'absolute',

@@ -409,10 +409,24 @@ export function CameraSessionExpo({ visible, maxFotos, initialCount, onClose, on
                 }}
               />
               {mode === 'confirm' && preview && (
+                // Backdrop preto opaco: o CameraView acima continua ativo no
+                // modo confirmação. Como a Image abaixo usa `contain` (não
+                // preenche a caixa toda), sem esse backdrop o feed ao vivo da
+                // câmera vazaria nas tarjas e daria a impressão de imagem
+                // "espelhada"/duplicada.
+                <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.confirmBackdrop]} />
+              )}
+              {mode === 'confirm' && preview && (
+                // `contain` (não `cover`): a foto capturada pode ser paisagem
+                // (4:3) quando o usuário gira o celular, e a caixa do preview é
+                // 3:4 retrato. Com `cover` o preview cortava as laterais e dava
+                // a impressão de que a foto foi recortada — mas o arquivo salvo
+                // é o frame inteiro. `contain` mostra a foto INTEIRA (com tarja
+                // preta nas sobras) pra a confirmação bater com o que foi salvo.
                 <Image
                   source={{ uri: preview.uri }}
                   style={StyleSheet.absoluteFill}
-                  resizeMode="cover"
+                  resizeMode="contain"
                 />
               )}
               {/* Marker de foco — aparece onde o usuário tocou e some em 900ms */}
@@ -555,6 +569,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#000',
   },
+
+  confirmBackdrop: { backgroundColor: '#000' },
 
   // Tap-to-focus marker — quadrado amarelo translúcido com borda
   focusMarker: {
