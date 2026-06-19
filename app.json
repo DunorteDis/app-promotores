@@ -87,6 +87,14 @@
           "photosPermission": "O aplicativo acessa suas fotos para registrar visitas.",
           "cameraPermission": "O aplicativo usa a câmera para registrar fotos das visitas."
         }
+      ],
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "O aplicativo usa a câmera para registrar fotos das visitas.",
+          "enableMicrophonePermission": false,
+          "enableLocation": false
+        }
       ]
     ],
     "experiments": {

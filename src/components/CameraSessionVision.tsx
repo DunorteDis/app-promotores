@@ -31,10 +31,13 @@ type Mode = 'camera' | 'confirm';
 
 type ZoomPill = { label: string; targetDeviceKind: 'wide' | 'ultraWide'; zoom: number };
 
-// vision-camera no Android (CameraX) usa zoom = fator de zoom direto, relativo
-// ao device atual. zoom=1 é o "neutral" do device (1x na lente wide; 0.5x na
-// ultra-wide). Por isso não precisa de mais nenhum hack — só trocar `device`
-// já dá o salto entre lentes.
+// vision-camera usa zoom = fator de zoom direto, relativo ao device atual, nas
+// DUAS plataformas (Android/CameraX e iOS/AVFoundation). Como selecionamos
+// devices FÍSICOS (wide-only / ultra-wide-only), o neutralZoom é 1 em ambas:
+// zoom=1 é o "neutral" do device (1x na wide; ~0.5x na ultra-wide) e zoom=2 é 2x
+// digital. Por isso não precisa de hack — só trocar `device` já dá o salto entre
+// lentes. (No iOS evitamos o device VIRTUAL Triple/Dual, cujo neutralZoom é >1 e
+// dá framing deslocado em 1x; o filtro de device abaixo pega só lentes físicas.)
 const RAIL_MAX_ZOOM_FACTOR = 5; // x — limite útil da régua (rolagem fina até ~5x)
 const FOCUS_MARKER_SIZE = 64;
 
@@ -56,9 +59,10 @@ export function CameraSessionVision({
   const [capturing, setCapturing] = useState(false);
 
   // --- Devices físicos ---
-  // Enumeramos uma vez no mount. CameraX expõe um device por lente física na
-  // maioria dos celulares modernos (Wide angle + Ultra-wide + Telephoto, se
-  // houver). Pegamos o wide pra 1x/2x e o ultra-wide pra 0.5x.
+  // Enumeramos quando a tela abre. Tanto CameraX (Android) quanto AVFoundation
+  // (iOS) expõem um device por lente física na maioria dos celulares modernos
+  // (Wide angle + Ultra-wide + Telephoto, se houver). Pegamos o wide pra 1x/2x e
+  // o ultra-wide pra 0.5x.
   const [devices, setDevices] = useState<CameraDevice[]>([]);
   useEffect(() => {
     if (!visible) return;

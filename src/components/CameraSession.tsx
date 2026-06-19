@@ -1,7 +1,5 @@
-import { Platform } from 'react-native';
 import type { MediaFile } from '@/services/media';
 
-import { CameraSessionExpo } from './CameraSessionExpo';
 import { CameraSessionVision } from './CameraSessionVision';
 
 type Props = {
@@ -13,17 +11,20 @@ type Props = {
 };
 
 /**
- * Wrapper que escolhe a implementação certa por plataforma:
- *   iOS    → expo-camera (CameraSessionExpo) — bem testado, funciona perfeito
- *   Android → react-native-vision-camera (CameraSessionVision) — expõe 0.5x
- *              ultra-wide nativamente, que expo-camera no Android não consegue
- *              (clampa zoom em mínimo 1x).
+ * Tela de câmera multi-shot, em cima do react-native-vision-camera nas DUAS
+ * plataformas (Android e iOS).
  *
- * A `Props` externa é idêntica nos dois → quem chama (DunorteWebView) não muda.
+ * Histórico: o iOS rodava no expo-camera (CameraSessionExpo) por ser bem
+ * testado, mas o expo-camera 17 NÃO expõe foco por toque (tap-to-focus) no iOS
+ * e o prop `autofocus` é invertido (`"on"` trava o foco após o primeiro foco).
+ * Migramos o iOS pro vision-camera, que entrega autofoco CONTÍNUO por padrão +
+ * foco real no ponto via `.focus({x,y})` (mesmo comportamento do Android). A
+ * seleção de lente usa devices FÍSICOS (wide / ultra-wide), cujo neutralZoom é
+ * 1 nas duas plataformas, então 0.5x / 1x / 2x funciona igual.
+ *
+ * `CameraSessionExpo.tsx` fica no repo como referência/fallback, mas não é mais
+ * referenciado por nenhum caminho de execução.
  */
 export function CameraSession(props: Props) {
-  if (Platform.OS === 'android') {
-    return <CameraSessionVision {...props} />;
-  }
-  return <CameraSessionExpo {...props} />;
+  return <CameraSessionVision {...props} />;
 }
