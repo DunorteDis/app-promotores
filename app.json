@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vexo",
     "slug": "vexo",
-    "version": "1.0.1",
+    "version": "1.0.3",
     "orientation": "portrait",
     "platforms": [
       "ios",
@@ -32,7 +32,7 @@
         "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos da galeria nas visitas.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "9",
+      "buildNumber": "11",
       "config": {
         "usesNonExemptEncryption": false
       }
