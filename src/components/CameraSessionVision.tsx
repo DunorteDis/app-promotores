@@ -128,10 +128,16 @@ export function CameraSessionVision({
     }
   }, [visible, hasPermission, requestPermission]);
 
-  // Formato 4:3 (a foto + preview saem como câmera nativa em modo "Foto")
+  // Formato 4:3. `photoAspectRatio` é a prioridade máxima (não muda o
+  // enquadramento de quem já funciona) e `photoResolution: 'max'` garante a foto
+  // sempre na resolução máxima. `videoResolution: 'max'` entra só como DESEMPATE:
+  // entre os formatos de foto máxima, escolhe o de preview mais nítido — era o
+  // que deixava o preview embaçado no iPhone 11 (a foto saía normal porque
+  // `takePhoto` usa um pipeline de captura com AF próprio).
   const format = useCameraFormat(activeDevice ?? undefined, [
     { photoAspectRatio: 4 / 3 },
     { photoResolution: 'max' },
+    { videoResolution: 'max' },
   ]);
 
   // Pills disponíveis (0.5x só se tiver ultraWideDevice)
