@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vexo",
     "slug": "vexo",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "platforms": [
       "ios",
