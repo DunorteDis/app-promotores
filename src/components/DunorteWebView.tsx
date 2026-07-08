@@ -11,7 +11,7 @@ import {
   BridgeResponse,
   INJECTED_JS,
 } from '@/services/bridge';
-import { captureImage, openFile, pickImages, type MediaFile } from '@/services/media';
+import { captureImage, openFile, pickImages, recordVideo, type MediaFile } from '@/services/media';
 import { cancelAppUpdate, downloadAndInstallApk } from '@/services/appUpdate';
 import { getCurrentLocation, requestLocationPermission, watchLocation } from '@/services/location';
 import { getNetworkSnapshot, subscribeNetwork } from '@/services/network';
@@ -246,6 +246,24 @@ export function DunorteWebView({ onOnlineChange }: Props) {
               ok: true,
               data: { files: streamPhotos ? [] : files },
             });
+            break;
+          }
+          case 'media.recordVideo': {
+            const payload = (req.payload ?? {}) as {
+              maxDurationSec?: number;
+              uploadUrl?: string;
+              contentType?: string;
+            };
+            const result = await recordVideo({
+              maxDurationSec: payload.maxDurationSec,
+              uploadUrl: String(payload.uploadUrl ?? ''),
+              contentType: payload.contentType,
+            });
+            if (result.ok) {
+              sendResponse({ id: req.id, ok: true, data: result });
+            } else {
+              sendResponse({ id: req.id, ok: false, error: result.error });
+            }
             break;
           }
           case 'media.openFile': {

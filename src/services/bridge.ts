@@ -16,6 +16,7 @@ export type BridgeRequest = {
     | 'media.capture'
     | 'media.pick'
     | 'media.captureSession'
+    | 'media.recordVideo'
     | 'media.openFile'
     | 'app.downloadUpdate'
     | 'app.cancelUpdate';
@@ -102,6 +103,7 @@ export const INJECTED_JS = `
     getPushToken: function () { return request('notifications.getToken'); },
     scheduleNotification: function (payload) { return request('notifications.schedule', payload); },
     captureSession: function (payload) { return request('media.captureSession', payload || {}); },
+    recordVideo: function (payload) { return request('media.recordVideo', payload || {}); },
     openFile: function (payload) { return request('media.openFile', payload || {}); },
     downloadUpdate: function (payload) { return request('app.downloadUpdate', payload || {}); },
     cancelUpdate: function () { return request('app.cancelUpdate'); },
@@ -166,6 +168,10 @@ export const INJECTED_JS = `
       el = el.parentElement;
     }
     if (!el) return;
+    // Inputs de vídeo não são interceptados: o picker de imagem não grava
+    // vídeo — a web deve usar window.DunorteNative.recordVideo diretamente.
+    var accept = (el.getAttribute('accept') || '').toLowerCase();
+    if (accept.indexOf('video') !== -1) return;
     e.preventDefault();
     handleFileInput(el);
   }, true);

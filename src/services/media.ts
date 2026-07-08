@@ -1,6 +1,7 @@
 import { Alert, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Video as VideoCompressor } from 'react-native-compressor';
 import * as Sharing from 'expo-sharing';
 import * as IntentLauncher from 'expo-intent-launcher';
 
@@ -70,6 +71,111 @@ export async function pickImages(multiple: boolean): Promise<MediaPickResult> {
       mimeType: asset.mimeType ?? 'image/jpeg',
       fileName: asset.fileName ?? `image_${Date.now()}.jpg`,
     })),
+  };
+}
+
+export type VideoRecordResult =
+  | { ok: true; cancelled: true }
+  | {
+      ok: true;
+      cancelled: false;
+      uploaded: boolean;
+      mimeType: string;
+      fileName: string;
+      sizeBytes: number | null;
+      durationMs: number | null;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Grava um vídeo com a câmera nativa do sistema e sobe o arquivo DIRETO pro
+ * `uploadUrl` (presigned PUT do S3), sem passar pela WebView. Vídeo é grande
+ * demais pra trafegar em base64 pela bridge — por isso o upload nativo é
+ * obrigatório: a web pede a presigned URL ao backend, chama a bridge e recebe
+ * só o resultado do upload.
+ */
+// ponytail: câmera do SISTEMA via image picker (UI pronta, gravar/rever/refazer);
+// se um dia precisar de UI própria (contador, limite visual), migrar pra
+// gravação no CameraSessionVision (vision-camera já suporta).
+export async function recordVideo(payload: {
+  maxDurationSec?: number;
+  uploadUrl: string;
+  /** Content-Type assinado no presign — o PUT PRECISA mandar exatamente esse header. */
+  contentType?: string;
+}): Promise<VideoRecordResult> {
+  if (!payload?.uploadUrl) {
+    return { ok: false, error: 'uploadUrl é obrigatório (vídeo não trafega em base64 pela bridge).' };
+  }
+
+  const { status } = await ImagePicker.requestCameraPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert(
+      'Permissão necessária',
+      'Permita o acesso à câmera nas configurações do dispositivo.',
+    );
+    return { ok: false, error: 'Permissão de câmera negada.' };
+  }
+
+  const maxDurationSec = Math.max(5, Math.min(300, Number(payload.maxDurationSec) || 60));
+
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+    videoMaxDuration: maxDurationSec,
+    // iOS: limita a 720p (arquivo menor pra rede de campo). Android ignora —
+    // a câmera do sistema grava no padrão dela.
+    videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+  });
+
+  if (result.canceled) return { ok: true, cancelled: true };
+
+  const asset = result.assets[0];
+  const mimeType = asset.mimeType ?? 'video/mp4';
+  // Header do PUT = o Content-Type que a web assinou no presign (S3 rejeita se
+  // divergir); o mimeType real do arquivo vai na resposta pra web decidir.
+  const putContentType = payload.contentType || mimeType;
+
+  // Comprime antes do upload (estilo WhatsApp): a câmera do sistema grava
+  // ~1080p com bitrate alto (60s ≈ 60-100MB) — reescala pra 720p/2Mbps H.264,
+  // ~15MB/min, viável no 4G de campo. Falhou a compressão? Sobe o original
+  // (pior em dados, melhor que perder o vídeo).
+  let uploadUri = asset.uri;
+  let sizeBytes: number | null = asset.fileSize ?? null;
+  try {
+    uploadUri = await VideoCompressor.compress(asset.uri, {
+      compressionMethod: 'manual',
+      maxSize: 1280,
+      bitrate: 2_000_000,
+    });
+    const info = await FileSystem.getInfoAsync(uploadUri);
+    if (info.exists && typeof info.size === 'number') sizeBytes = info.size;
+  } catch {
+    uploadUri = asset.uri;
+  }
+
+  try {
+    const upload = await FileSystem.uploadAsync(payload.uploadUrl, uploadUri, {
+      httpMethod: 'PUT',
+      headers: { 'Content-Type': putContentType },
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    });
+    if (upload.status < 200 || upload.status >= 300) {
+      return { ok: false, error: `Falha no upload do vídeo (HTTP ${upload.status}).` };
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Falha no upload do vídeo.',
+    };
+  }
+
+  return {
+    ok: true,
+    cancelled: false,
+    uploaded: true,
+    mimeType,
+    fileName: asset.fileName ?? `video_${Date.now()}.mp4`,
+    sizeBytes,
+    durationMs: asset.duration ?? null,
   };
 }
 
