@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "50172172800",
+    "project_id": "vexo---venda-e-execucao",
+    "storage_bucket": "vexo---venda-e-execucao.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:50172172800:android:127bcb6bbe19e4f17396e5",
+        "android_client_info": {
+          "package_name": "br.com.dunorte.vexo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmRSEUsp65hVsRHytIiiLx4D8Yg6-VryQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

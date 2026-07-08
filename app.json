@@ -39,6 +39,7 @@
     },
     "android": {
       "package": "br.com.dunorte.vexo",
+      "googleServicesFile": "./google-services.json",
       "icon": "./assets/icon_transparent.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/playstore_adaptive_fg.png",
