@@ -80,7 +80,13 @@
           "locationAlwaysAndWhenInUsePermission": "Permita o acesso à sua localização para registrar visitas."
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1565C0"
+        }
+      ],
       "expo-asset",
       [
         "expo-image-picker",

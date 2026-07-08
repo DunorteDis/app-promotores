@@ -25,7 +25,9 @@ import { CameraSession } from './CameraSession';
 import { LoadingOverlay } from './LoadingOverlay';
 import { OfflineBanner } from './OfflineBanner';
 
-const TARGET_URL = 'https://vexo.dunorte.com.br';
+// Build de desenvolvimento (expo run:android): abre o Vite local via adb
+// reverse (localhost no celular = PC). Release (__DEV__ false) segue produção.
+const TARGET_URL = __DEV__ ? 'http://localhost:8080' : 'https://vexo.dunorte.com.br';
 
 type Props = {
   onOnlineChange?: (online: boolean) => void;
