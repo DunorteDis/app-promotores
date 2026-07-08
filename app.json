@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vexo",
     "slug": "vexo",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "platforms": [
       "ios",
@@ -70,7 +70,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
-      "versionCode": 3
+      "versionCode": 4
     },
     "plugins": [
       "expo-router",
