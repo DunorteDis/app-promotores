@@ -11,6 +11,7 @@ export type BridgeRequest = {
     | 'network.subscribe'
     | 'network.unsubscribe'
     | 'notifications.requestPermission'
+    | 'notifications.getToken'
     | 'notifications.schedule'
     | 'media.capture'
     | 'media.pick'
@@ -98,6 +99,7 @@ export const INJECTED_JS = `
     subscribeNetwork: function () { return request('network.subscribe'); },
     unsubscribeNetwork: function () { return request('network.unsubscribe'); },
     requestNotificationPermission: function () { return request('notifications.requestPermission'); },
+    getPushToken: function () { return request('notifications.getToken'); },
     scheduleNotification: function (payload) { return request('notifications.schedule', payload); },
     captureSession: function (payload) { return request('media.captureSession', payload || {}); },
     openFile: function (payload) { return request('media.openFile', payload || {}); },

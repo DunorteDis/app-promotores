@@ -16,6 +16,7 @@ import {
   type CameraDevice,
 } from 'react-native-vision-camera';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { MediaFile } from '@/services/media';
 
@@ -49,6 +50,7 @@ export function CameraSessionVision({
   onPhotoConfirmed,
 }: Props) {
   const { hasPermission, requestPermission } = useCameraPermission();
+  const insets = useSafeAreaInsets();
   const cameraRef = useRef<Camera>(null);
 
   const [mode, setMode] = useState<Mode>('camera');
@@ -329,8 +331,10 @@ export function CameraSessionVision({
   return (
     <Modal visible animationType="slide" statusBarTranslucent transparent={false}>
       <GestureHandlerRootView style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
+        {/* Header — o Modal statusBarTranslucent cobre a tela inteira (inclusive
+            sob notch/status bar); o padding precisa respeitar o inset real do
+            aparelho, senão o Encerrar/contador somem em telas com recorte. */}
+        <View style={[styles.header, { paddingTop: Math.max(40, insets.top + 8) }]}>
           <TouchableOpacity style={styles.topBtn} onPress={handleClose} hitSlop={8}>
             <Text style={styles.topBtnText}>✕  Encerrar</Text>
           </TouchableOpacity>
@@ -478,7 +482,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
 
   header: {
-    paddingTop: 40,
     paddingBottom: 12,
     paddingHorizontal: 16,
     flexDirection: 'row',

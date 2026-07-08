@@ -16,6 +16,7 @@ import { cancelAppUpdate, downloadAndInstallApk } from '@/services/appUpdate';
 import { getCurrentLocation, requestLocationPermission, watchLocation } from '@/services/location';
 import { getNetworkSnapshot, subscribeNetwork } from '@/services/network';
 import {
+  getPushTokenAsync,
   registerForPushNotificationsAsync,
   scheduleLocalNotification,
 } from '@/services/notifications';
@@ -178,6 +179,11 @@ export function DunorteWebView({ onOnlineChange }: Props) {
               data: result,
               error: result.granted ? undefined : result.error,
             });
+            break;
+          }
+          case 'notifications.getToken': {
+            const result = await getPushTokenAsync();
+            sendResponse({ id: req.id, ok: true, data: result });
             break;
           }
           case 'notifications.schedule': {
