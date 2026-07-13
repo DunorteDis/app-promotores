@@ -32,7 +32,7 @@
         "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos da galeria nas visitas.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "13",
+      "buildNumber": "14",
       "config": {
         "usesNonExemptEncryption": false
       }
