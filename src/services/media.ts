@@ -166,6 +166,14 @@ export async function recordVideo(payload: {
       ok: false,
       error: error instanceof Error ? error.message : 'Falha no upload do vídeo.',
     };
+  } finally {
+    // Limpa os temporários: o original da câmera do sistema (60s ≈ 60-100MB) e
+    // a cópia comprimida ficavam PRA SEMPRE no cache a cada gravação — era um
+    // dos vilões do app "pesando" GB de memória interna no aparelho.
+    void FileSystem.deleteAsync(asset.uri, { idempotent: true }).catch(() => {});
+    if (uploadUri !== asset.uri) {
+      void FileSystem.deleteAsync(uploadUri, { idempotent: true }).catch(() => {});
+    }
   }
 
   return {
@@ -177,6 +185,44 @@ export async function recordVideo(payload: {
     sizeBytes,
     durationMs: asset.duration ?? null,
   };
+}
+
+// Diretórios do WebView/Chromium dentro do cache — auto-gerenciados (o próprio
+// Chromium limita o tamanho); não varrer pra não mexer em arquivos abertos.
+const SWEEP_SKIP = new Set(['WebView', 'org.chromium.android_webview', 'http-cache']);
+
+/**
+ * Apaga entradas do cache do app com mais de `maxAgeHours` horas. Remedia o
+ * acúmulo histórico nos aparelhos dos promotores: fotos do vision-camera
+ * (mrousavy*.jpg, 3-8MB cada), vídeos do ImagePicker + cópias comprimidas e
+ * materiais abertos nunca eram apagados — apps chegavam a >1GB de "memória
+ * interna". Cache é descartável por contrato (o SO pode limpar a qualquer
+ * momento), então idade é critério suficiente; 48h dá folga pra qualquer
+ * fluxo em voo. Chamada fire-and-forget na abertura do app.
+ */
+export async function sweepStaleCache(maxAgeHours = 48): Promise<void> {
+  const cacheDir = FileSystem.cacheDirectory;
+  if (!cacheDir) return;
+  const cutoffSec = Date.now() / 1000 - maxAgeHours * 3600; // modificationTime é em segundos
+  let names: string[] = [];
+  try {
+    names = await FileSystem.readDirectoryAsync(cacheDir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (SWEEP_SKIP.has(name)) continue;
+    try {
+      const info = await FileSystem.getInfoAsync(cacheDir + name);
+      if (!info.exists) continue;
+      const mtime = info.modificationTime ?? 0;
+      if (mtime > 0 && mtime < cutoffSec) {
+        await FileSystem.deleteAsync(cacheDir + name, { idempotent: true });
+      }
+    } catch {
+      // arquivo em uso/protegido — fica pra próxima varredura
+    }
+  }
 }
 
 export type OpenFileResult =

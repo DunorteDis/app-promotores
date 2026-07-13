@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, StyleSheet, View } from 'react-native';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import * as Notifications from 'expo-notifications';
 import type { LocationSubscription } from 'expo-location';
@@ -11,7 +11,7 @@ import {
   BridgeResponse,
   INJECTED_JS,
 } from '@/services/bridge';
-import { captureImage, openFile, pickImages, recordVideo, type MediaFile } from '@/services/media';
+import { captureImage, openFile, pickImages, recordVideo, sweepStaleCache, type MediaFile } from '@/services/media';
 import { cancelAppUpdate, downloadAndInstallApk } from '@/services/appUpdate';
 import { getCurrentLocation, requestLocationPermission, watchLocation } from '@/services/location';
 import { getNetworkSnapshot, subscribeNetwork } from '@/services/network';
@@ -22,6 +22,7 @@ import {
 } from '@/services/notifications';
 
 import { CameraSession } from './CameraSession';
+import { ErrorScreen } from './ErrorScreen';
 import { LoadingOverlay } from './LoadingOverlay';
 import { OfflineBanner } from './OfflineBanner';
 
@@ -64,6 +65,13 @@ export function DunorteWebView({ onOnlineChange }: Props) {
     sessionResolveRef.current = null;
     setCameraSession((prev) => ({ ...prev, visible: false }));
   }, []);
+
+  // Falha de carga do frame principal (sem internet, DNS, servidor fora).
+  // null = sem erro; string = código técnico mostrado discreto na ErrorScreen.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // O attempt corrente falhou? Decidido em onError; onLoadEnd usa isso pra
+  // saber se pode limpar o loadError (só carga real bem-sucedida limpa).
+  const attemptErrorRef = useRef(false);
 
   const clearLoadingTimeout = useCallback(() => {
     if (loadingTimeoutRef.current) {
@@ -334,6 +342,13 @@ export function DunorteWebView({ onOnlineChange }: Props) {
     [handleRequest],
   );
 
+  // Varredura de cache na abertura (fire-and-forget): apaga temporários com
+  // 48h+ — fotos/vídeos de sessões antigas que vazaram antes do fix e o
+  // histórico já acumulado nos aparelhos (>1GB em alguns promotores).
+  useEffect(() => {
+    void sweepStaleCache();
+  }, []);
+
   useEffect(() => {
     const sub = subscribeNetwork((snapshot) => {
       const isOnline = snapshot.isConnected && snapshot.isInternetReachable !== false;
@@ -390,12 +405,30 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         injectedJavaScriptBeforeContentLoaded={INJECTED_JS}
         injectedJavaScript={INJECTED_JS}
         onMessage={onMessage}
-        onLoadStart={() => {
+        onLoadStart={({ nativeEvent }) => {
+          // NÃO limpar loadError aqui: depois do onError o Android dispara um
+          // loadStart fantasma da página interna de erro (chrome-error://) —
+          // limpar em qualquer loadStart apagava a ErrorScreen milissegundos
+          // depois de ela aparecer. Só marcamos o começo de tentativa REAL.
+          const url = nativeEvent.url ?? '';
+          if (!url.startsWith('chrome-error') && !url.startsWith('about:')) {
+            attemptErrorRef.current = false;
+          }
           if (!firstLoadDoneRef.current) showLoading();
         }}
-        onLoadEnd={() => {
+        onLoadEnd={({ nativeEvent }) => {
           firstLoadDoneRef.current = true;
           hideLoading();
+          // Carga real terminou sem erro → some com a tela de erro (cobre o
+          // retry e a recuperação espontânea quando a rede volta).
+          const url = nativeEvent.url ?? '';
+          if (
+            !attemptErrorRef.current &&
+            !url.startsWith('chrome-error') &&
+            !url.startsWith('about:')
+          ) {
+            setLoadError(null);
+          }
         }}
         onLoadProgress={({ nativeEvent }) => {
           if (nativeEvent.progress >= 0.7) hideLoading();
@@ -403,8 +436,11 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         onNavigationStateChange={(state) => setCanGoBack(state.canGoBack)}
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
+          attemptErrorRef.current = true;
           hideLoading();
-          Alert.alert('Erro ao carregar', nativeEvent.description || 'Falha na página.');
+          // ErrorScreen no lugar do Alert + página crua do Chromium: mensagem
+          // clara pro promotor e botão de tentar de novo.
+          setLoadError(nativeEvent.description || 'Falha ao carregar a página.');
         }}
         onHttpError={() => hideLoading()}
         javaScriptEnabled
@@ -418,6 +454,17 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         thirdPartyCookiesEnabled
         sharedCookiesEnabled
         mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
+      />
+      {/* ErrorScreen ANTES do LoadingOverlay: durante o retry o loading pinta
+          por cima da tela de erro (feedback); se falhar de novo, o loading some
+          e a tela de erro reaparece. Sucesso limpa via onLoadEnd. */}
+      <ErrorScreen
+        visible={loadError != null}
+        detail={loadError ?? undefined}
+        onRetry={() => {
+          showLoading(); // feedback imediato (o guard de 1º load não cobre o retry)
+          webRef.current?.reload();
+        }}
       />
       <LoadingOverlay visible={loading} />
       <CameraSession

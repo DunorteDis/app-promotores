@@ -87,6 +87,11 @@ export function CameraSessionVision({
       devices.find((d) => d.position === 'back'),
     [devices],
   );
+  // Só device FÍSICO só-ultra-wide (iOS sempre expõe; alguns Androids também).
+  // O fallback antigo ("qualquer device com ultra-wide entre as físicas") pegava
+  // a câmera LÓGICA do Android — trocar pra ela com zoom=1 mantém o enquadramento
+  // wide e o 0.5x não fazia nada. Nesses aparelhos o caminho certo é zoom < 1 no
+  // próprio wide (pill dinâmica em zoomPills).
   const ultraWideDevice = useMemo(
     () =>
       devices.find(
@@ -94,10 +99,6 @@ export function CameraSessionVision({
           d.position === 'back' &&
           d.physicalDevices.length === 1 &&
           d.physicalDevices.includes('ultra-wide-angle-camera'),
-      ) ??
-      // Fallback: qualquer device com ultra-wide entre as físicas
-      devices.find(
-        (d) => d.position === 'back' && d.physicalDevices.includes('ultra-wide-angle-camera'),
       ),
     [devices],
   );
@@ -142,21 +143,35 @@ export function CameraSessionVision({
     { videoResolution: 'max' },
   ]);
 
-  // Pills disponíveis (0.5x só se tiver ultraWideDevice)
+  // Pill de ultra-wide:
+  // * device físico só-ultra-wide (iOS e alguns Androids) → "0.5x" trocando de device;
+  // * Android típico (Samsung/Xiaomi): a ultra-wide NÃO vem como device separado —
+  //   o HAL troca de lente sozinho quando zoomRatio < 1 na câmera lógica. A pill
+  //   usa o minZoom REAL do aparelho como rótulo (ex.: "0.6x") e só zooma out no
+  //   próprio wide, sem trocar de device.
   const zoomPills = useMemo<ZoomPill[]>(() => {
     const pills: ZoomPill[] = [];
-    if (ultraWideDevice) pills.push({ label: '0.5x', targetDeviceKind: 'ultraWide', zoom: 1 });
+    if (ultraWideDevice) {
+      pills.push({ label: '0.5x', targetDeviceKind: 'ultraWide', zoom: 1 });
+    } else if (wideDevice && wideDevice.minZoom > 0 && wideDevice.minZoom < 1) {
+      // minZoom > 0: o vision-camera reporta 0 quando o zoomState vem nulo
+      // (fallback `?: 0f` no CameraDeviceDetails.kt) — sem a guarda viraria
+      // uma pill "0x" que seta zoomRatio inválido.
+      const label = `${Math.round(wideDevice.minZoom * 10) / 10}x`;
+      pills.push({ label, targetDeviceKind: 'wide', zoom: wideDevice.minZoom });
+    }
     pills.push({ label: '1x', targetDeviceKind: 'wide', zoom: 1 });
     pills.push({ label: '2x', targetDeviceKind: 'wide', zoom: 2 });
     return pills;
-  }, [ultraWideDevice]);
+  }, [ultraWideDevice, wideDevice]);
 
   // Qual pill destacar
   const activePillLabel = useMemo(() => {
     if (activeKind === 'ultraWide') return '0.5x';
+    if (zoom < 1) return zoomPills[0]?.label ?? '1x'; // sub-1 no wide = pill ultra-wide dinâmica
     if (zoom >= 1.5) return '2x';
     return '1x';
-  }, [activeKind, zoom]);
+  }, [activeKind, zoom, zoomPills]);
 
   const handlePillPress = useCallback(
     (pill: ZoomPill) => {
@@ -194,9 +209,18 @@ export function CameraSessionVision({
     }
   }, [capturing]);
 
+  // Apaga o JPEG temporário que o takePhoto grava no cache. O base64 já está
+  // em memória (MediaFile) — sem apagar, cada foto (3-8MB em resolução máxima)
+  // ficava PRA SEMPRE no aparelho e o app chegava a >1GB de memória interna.
+  // O arquivo só precisa existir enquanto o preview de confirmação está na tela.
+  const discardPreviewFile = useCallback((uri: string) => {
+    void FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+  }, []);
+
   const handleUsePhoto = useCallback(() => {
     if (!preview) return;
     onPhotoConfirmed?.(preview.file);
+    discardPreviewFile(preview.uri);
     const nextPhotos = [...photos, preview.file];
     const nextCount = count + 1;
     setPhotos(nextPhotos);
@@ -207,16 +231,18 @@ export function CameraSessionVision({
     } else {
       setMode('camera');
     }
-  }, [preview, photos, count, maxFotos, onClose, onPhotoConfirmed]);
+  }, [preview, photos, count, maxFotos, onClose, onPhotoConfirmed, discardPreviewFile]);
 
   const handleRetake = useCallback(() => {
+    if (preview) discardPreviewFile(preview.uri);
     setPreview(null);
     setMode('camera');
-  }, []);
+  }, [preview, discardPreviewFile]);
 
   const handleClose = useCallback(() => {
+    if (preview) discardPreviewFile(preview.uri);
     onClose(photos);
-  }, [onClose, photos]);
+  }, [onClose, photos, preview, discardPreviewFile]);
 
   // --- Pinch-to-zoom ---
   const zoomRef = useRef(zoom);
@@ -518,6 +544,12 @@ const styles = StyleSheet.create({
   cameraBox: {
     width: '100%',
     aspectRatio: 3 / 4,
+    // Telas "curtas" (16:9 — iPhone SE/8/8 Plus, Androids antigos): a caixa 3:4
+    // derivada da largura não cabe entre header e footer e estourava por cima
+    // do header (irmão anterior na árvore → pintado por baixo), escondendo o
+    // Encerrar/contador. O teto faz o Yoga clampar a altura E recalcular a
+    // largura mantendo o 3:4; onde a caixa já cabia, o layout fica idêntico.
+    maxHeight: '100%',
     overflow: 'hidden',
     backgroundColor: '#000',
   },
