@@ -30,9 +30,24 @@ export async function getCurrentLocation(): Promise<LocationResult> {
     const services = await Location.hasServicesEnabledAsync();
     if (!services) return { ok: false, error: 'Serviços de localização desativados.' };
 
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
+    // High (GPS + fused), não Balanced (~100 m): o raio alimenta o gate de
+    // check-in de 150 m — Balanced falha na margem.
+    // Fix fresco a frio pode passar do orçamento do front (8–10 s) e derrubar
+    // o caller no navigator do WKWebView (a fonte ruim). Se demorar, serve o
+    // last-known recente do sistema e deixa o watch refinar depois.
+    const fresh = Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
     });
+    let position = await Promise.race([
+      fresh,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+    ]);
+    if (!position) {
+      position = await Location.getLastKnownPositionAsync({ maxAge: 120_000 });
+    }
+    if (!position) {
+      position = await fresh;
+    }
 
     return {
       ok: true,
@@ -57,9 +72,12 @@ export function watchLocation(
 ): Promise<Location.LocationSubscription | null> {
   return Location.watchPositionAsync(
     {
-      accuracy: Location.Accuracy.Balanced,
+      accuracy: Location.Accuracy.High,
       timeInterval: 15000,
-      distanceInterval: 25,
+      // 0, não 25: o iOS ignora timeInterval e só respeita o filtro de
+      // distância — com 25 m o promotor parado no PDV nunca recebia o
+      // refinamento do fix e o gate de check-in (accuracy ≤ 150) não liberava.
+      distanceInterval: 0,
     },
     (position) => {
       onUpdate({
@@ -71,6 +89,11 @@ export function watchLocation(
         speed: position.coords.speed,
         timestamp: position.timestamp,
       });
+    },
+    (reason) => {
+      // Sem isso, falha no MEIO do watch era silenciosa e o front segurava
+      // o último fix como se fosse atual.
+      onError?.(reason);
     },
   ).catch((error) => {
     onError?.(error instanceof Error ? error.message : String(error));

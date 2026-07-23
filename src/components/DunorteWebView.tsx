@@ -45,6 +45,12 @@ export function DunorteWebView({ onOnlineChange }: Props) {
   const batteryUnsubRef = useRef<null | (() => void)>(null);
   const networkUnsubRef = useRef<null | (() => void)>(null);
   const locationSubRef = useRef<LocationSubscription | null>(null);
+  // Requests rodam concorrentes (onMessage não enfileira): um unwatch que
+  // chega com um watch ainda em voo (parado no await de permissão) era no-op
+  // e o watch concluía depois, gravando uma subscription de GPS órfã que
+  // ninguém removia. Cada watch/unwatch avança a época; um watch só grava a
+  // subscription se ainda for o mais recente — senão remove na hora.
+  const locationEpochRef = useRef(0);
   const firstLoadDoneRef = useRef(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -139,23 +145,35 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             break;
           }
           case 'location.watch': {
+            const epoch = ++locationEpochRef.current;
             const granted = await requestLocationPermission();
             if (!granted) {
               sendResponse({ id: req.id, ok: false, error: 'Permissão de localização negada.' });
+              break;
+            }
+            if (epoch !== locationEpochRef.current) {
+              sendResponse({ id: req.id, ok: false, error: 'Watch substituído.' });
               break;
             }
             if (locationSubRef.current) {
               locationSubRef.current.remove();
               locationSubRef.current = null;
             }
-            locationSubRef.current = await watchLocation(
+            const sub = await watchLocation(
               (payload) => sendEvent({ event: 'location.update', data: payload }),
               (error) => sendEvent({ event: 'location.update', data: { error } }),
             );
+            if (epoch !== locationEpochRef.current) {
+              sub?.remove();
+              sendResponse({ id: req.id, ok: false, error: 'Watch substituído.' });
+              break;
+            }
+            locationSubRef.current = sub;
             sendResponse({ id: req.id, ok: true, data: { watching: true } });
             break;
           }
           case 'location.unwatch': {
+            locationEpochRef.current += 1;
             locationSubRef.current?.remove();
             locationSubRef.current = null;
             sendResponse({ id: req.id, ok: true, data: { stopped: true } });
