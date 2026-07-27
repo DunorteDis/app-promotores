@@ -7,6 +7,8 @@ export type BridgeRequest = {
     | 'location.get'
     | 'location.watch'
     | 'location.unwatch'
+    | 'location.diagnostics'
+    | 'location.openSettings'
     | 'network.get'
     | 'network.subscribe'
     | 'network.unsubscribe'
@@ -18,6 +20,8 @@ export type BridgeRequest = {
     | 'media.captureSession'
     | 'media.recordVideo'
     | 'media.openFile'
+    | 'media.saveToGallery'
+    | 'media.openGallery'
     | 'app.downloadUpdate'
     | 'app.cancelUpdate';
   payload?: Record<string, unknown>;
@@ -96,6 +100,8 @@ export const INJECTED_JS = `
     getLocation: function () { return request('location.get'); },
     watchLocation: function () { return request('location.watch'); },
     unwatchLocation: function () { return request('location.unwatch'); },
+    locationDiagnostics: function (payload) { return request('location.diagnostics', payload || {}); },
+    openLocationSettings: function (payload) { return request('location.openSettings', payload || {}); },
     getNetwork: function () { return request('network.get'); },
     subscribeNetwork: function () { return request('network.subscribe'); },
     unsubscribeNetwork: function () { return request('network.unsubscribe'); },
@@ -105,6 +111,8 @@ export const INJECTED_JS = `
     captureSession: function (payload) { return request('media.captureSession', payload || {}); },
     recordVideo: function (payload) { return request('media.recordVideo', payload || {}); },
     openFile: function (payload) { return request('media.openFile', payload || {}); },
+    saveToGallery: function (payload) { return request('media.saveToGallery', payload || {}); },
+    openGallery: function () { return request('media.openGallery'); },
     downloadUpdate: function (payload) { return request('app.downloadUpdate', payload || {}); },
     cancelUpdate: function () { return request('app.cancelUpdate'); },
     on: function (event, cb) {
@@ -267,7 +275,7 @@ export const INJECTED_JS = `
     }
   } catch (e) { /* noop */ }
 
-  post({ event: 'bridge.ready', data: { version: 3, batteryPolyfill: true, appUpdate: true } });
+  post({ event: 'bridge.ready', data: { version: 4, batteryPolyfill: true, appUpdate: true, saveToGallery: true } });
 })();
 true;
 `;

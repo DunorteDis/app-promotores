@@ -1,9 +1,10 @@
-import { Alert, Platform } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Video as VideoCompressor } from 'react-native-compressor';
 import * as Sharing from 'expo-sharing';
 import * as IntentLauncher from 'expo-intent-launcher';
+import * as MediaLibrary from 'expo-media-library';
 
 export type MediaFile = {
   base64: string;
@@ -225,6 +226,15 @@ export async function sweepStaleCache(maxAgeHours = 48): Promise<void> {
   }
 }
 
+/** Só basename, sem path, com chars seguros de FS — evita path traversal. */
+function safeFileName(raw: string | undefined, fallbackPrefix = 'arquivo'): string {
+  const name = raw?.trim() || `${fallbackPrefix}_${Date.now()}`;
+  const baseName = name.split(/[\\/]/).pop() ?? name;
+  return (
+    baseName.replace(/[^\w.\-]/g, '_').slice(0, 120) || `${fallbackPrefix}_${Date.now()}`
+  );
+}
+
 export type OpenFileResult =
   | { ok: true }
   | { ok: false; error: string };
@@ -247,10 +257,7 @@ export async function openFile(payload: {
       return { ok: false, error: 'Arquivo vazio.' };
     }
 
-    // Sanitiza nome do arquivo (só basename, sem path; chars seguros).
-    const rawName = payload.fileName?.trim() || `arquivo_${Date.now()}`;
-    const baseName = rawName.split(/[\\/]/).pop() ?? rawName;
-    const safeName = baseName.replace(/[^\w.\-]/g, '_').slice(0, 120) || `arquivo_${Date.now()}`;
+    const safeName = safeFileName(payload.fileName);
 
     const cacheDir = FileSystem.cacheDirectory;
     if (!cacheDir) {
@@ -313,6 +320,132 @@ export async function openFile(payload: {
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'Falha ao abrir arquivo.',
+    };
+  }
+}
+
+export type SaveToGalleryResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/** A galeria identifica o tipo pela extensão — garante uma coerente com o mime. */
+function ensureImageExt(name: string, mimeType?: string): string {
+  if (/\.(jpe?g|png|webp|heic|gif)$/i.test(name)) return name;
+  const mime = (mimeType ?? '').toLowerCase();
+  const ext = mime.includes('png')
+    ? '.png'
+    : mime.includes('webp')
+      ? '.webp'
+      : mime.includes('heic')
+        ? '.heic'
+        : '.jpg';
+  return name + ext;
+}
+
+/**
+ * Salva uma imagem (base64) na GALERIA do celular — fora do app, junto das
+ * fotos da câmera. Usado pelo promotor pra baixar as fotos das pesquisas.
+ *
+ * Usa permissão write-only (`requestPermissionsAsync(true)`): dá pra ADICIONAR
+ * na galeria sem pedir acesso de LEITURA à biblioteca inteira do usuário. Por
+ * isso também não criamos álbum "Dunorte" — álbum exigiria acesso total, o que
+ * não se justifica pra um botão de download.
+ *
+ * O arquivo intermediário no cache é apagado logo após a cópia: sem isso o cache
+ * volta a inchar como no histórico que motivou o `sweepStaleCache`.
+ */
+export async function saveToGallery(payload: {
+  base64: string;
+  mimeType?: string;
+  fileName?: string;
+}): Promise<SaveToGalleryResult> {
+  try {
+    if (!payload?.base64) {
+      return { ok: false, error: 'Arquivo vazio.' };
+    }
+
+    // NÃO abortamos quando `granted` é false: no Android 13+ a permissão de
+    // escrita não é mais requisitável e inserir o PRÓPRIO conteúdo no MediaStore
+    // dispensa permissão — abortar aqui barraria um save que funcionaria. Só
+    // culpamos a permissão se a gravação em si falhar (ver catch abaixo).
+    const { granted } = await MediaLibrary.requestPermissionsAsync(true);
+
+    const cacheDir = FileSystem.cacheDirectory;
+    if (!cacheDir) {
+      return { ok: false, error: 'Cache do app indisponível.' };
+    }
+
+    const dir = cacheDir + 'downloads/';
+    const dirInfo = await FileSystem.getInfoAsync(dir);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    }
+
+    const safeName = ensureImageExt(safeFileName(payload.fileName, 'foto'), payload.mimeType);
+    const fileUri = dir + safeName;
+    await FileSystem.writeAsStringAsync(fileUri, payload.base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    try {
+      await MediaLibrary.saveToLibraryAsync(fileUri);
+    } catch (error) {
+      if (!granted) {
+        Alert.alert(
+          'Permissão necessária',
+          'Permita o acesso às fotos nas configurações do dispositivo para salvar imagens na galeria.',
+        );
+        return { ok: false, error: 'Permissão de galeria negada.' };
+      }
+      throw error;
+    } finally {
+      await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => {
+        /* fica pro sweepStaleCache */
+      });
+    }
+
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Falha ao salvar na galeria.',
+    };
+  }
+}
+
+/**
+ * Abre o app de fotos DO USUÁRIO (Galeria, Google Fotos, Fotos do iOS — o que
+ * ele usa), pra conferir o que acabou de ser salvo.
+ *
+ * No Android a rota certa é ACTION_MAIN + CATEGORY_APP_GALLERY: é a categoria
+ * que os apps de galeria declaram, então o sistema abre o preferido do usuário
+ * em vez de um seletor. Nem todo fabricante declara — daí o fallback pro VIEW
+ * de `image/*`, que ao menos cai num visualizador.
+ */
+export async function openGallery(): Promise<OpenFileResult> {
+  try {
+    if (Platform.OS === 'android') {
+      try {
+        await IntentLauncher.startActivityAsync('android.intent.action.MAIN', {
+          category: 'android.intent.category.APP_GALLERY',
+        });
+        return { ok: true };
+      } catch {
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          type: 'image/*',
+        });
+        return { ok: true };
+      }
+    }
+
+    // iOS: esquema do app Fotos. openURL não exige LSApplicationQueriesSchemes
+    // (só canOpenURL exigiria).
+    await Linking.openURL('photos-redirect://');
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Não foi possível abrir a galeria.',
     };
   }
 }

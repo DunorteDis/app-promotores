@@ -11,9 +11,15 @@ import {
   BridgeResponse,
   INJECTED_JS,
 } from '@/services/bridge';
-import { captureImage, openFile, pickImages, recordVideo, sweepStaleCache, type MediaFile } from '@/services/media';
+import { captureImage, openFile, openGallery, pickImages, recordVideo, saveToGallery, sweepStaleCache, type MediaFile } from '@/services/media';
 import { cancelAppUpdate, downloadAndInstallApk } from '@/services/appUpdate';
-import { getCurrentLocation, requestLocationPermission, watchLocation } from '@/services/location';
+import {
+  getCurrentLocation,
+  getLocationDiagnostics,
+  openLocationSettings,
+  requestLocationPermission,
+  watchLocation,
+} from '@/services/location';
 import { getNetworkSnapshot, subscribeNetwork } from '@/services/network';
 import {
   getPushTokenAsync,
@@ -303,6 +309,51 @@ export function DunorteWebView({ onOnlineChange }: Props) {
               mimeType: payload.mimeType,
               fileName: payload.fileName,
             });
+            if (result.ok) {
+              sendResponse({ id: req.id, ok: true, data: { opened: true } });
+            } else {
+              sendResponse({ id: req.id, ok: false, error: result.error });
+            }
+            break;
+          }
+          case 'media.saveToGallery': {
+            const payload = (req.payload ?? {}) as {
+              base64?: string;
+              mimeType?: string;
+              fileName?: string;
+            };
+            const result = await saveToGallery({
+              base64: payload.base64 ?? '',
+              mimeType: payload.mimeType,
+              fileName: payload.fileName,
+            });
+            if (result.ok) {
+              sendResponse({ id: req.id, ok: true, data: { saved: true } });
+            } else {
+              sendResponse({ id: req.id, ok: false, error: result.error });
+            }
+            break;
+          }
+          case 'location.diagnostics': {
+            const payload = (req.payload ?? {}) as { request?: boolean };
+            const diag = await getLocationDiagnostics(payload.request === true);
+            sendResponse({ id: req.id, ok: true, data: diag });
+            break;
+          }
+          case 'location.openSettings': {
+            const payload = (req.payload ?? {}) as { target?: 'app' | 'services' };
+            const result = await openLocationSettings(
+              payload.target === 'services' ? 'services' : 'app',
+            );
+            if (result.ok) {
+              sendResponse({ id: req.id, ok: true, data: { opened: true } });
+            } else {
+              sendResponse({ id: req.id, ok: false, error: result.error });
+            }
+            break;
+          }
+          case 'media.openGallery': {
+            const result = await openGallery();
             if (result.ok) {
               sendResponse({ id: req.id, ok: true, data: { opened: true } });
             } else {

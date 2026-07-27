@@ -1,4 +1,6 @@
+import { Linking, Platform } from 'react-native';
 import * as Location from 'expo-location';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 export type LocationPayload = {
   latitude: number;
@@ -17,6 +19,89 @@ export type LocationResult =
 export async function requestLocationPermission(): Promise<boolean> {
   const { status } = await Location.requestForegroundPermissionsAsync();
   return status === 'granted';
+}
+
+/**
+ * Estado bruto da localização, pra web distinguir as CAUSAS de "sem GPS" em vez
+ * de tratar tudo como sinal fraco: serviço desligado, permissão negada e
+ * permissão só aproximada dão o mesmo sintoma na tela mas exigem ações
+ * diferentes do usuário.
+ *
+ * `androidAccuracy: 'coarse'` é o caso traiçoeiro — o Android borra a posição
+ * pra ~1-3 km de propósito, então o gate de check-in (150 m) nunca libera por
+ * mais que o promotor ande até a porta da loja.
+ *
+ * No iOS o expo-location expõe só o `scope` (whenInUse/always), NÃO o
+ * `accuracyAuthorization` (full/reduced) — lá `iosScope` é o que dá pra saber, e
+ * precisão reduzida cai como sinal fraco mesmo.
+ */
+export type LocationDiagnostics = {
+  platform: 'android' | 'ios' | 'other';
+  servicesEnabled: boolean;
+  status: 'granted' | 'denied' | 'undetermined';
+  canAskAgain: boolean;
+  androidAccuracy: 'fine' | 'coarse' | 'none' | null;
+  iosScope: 'whenInUse' | 'always' | 'none' | null;
+};
+
+/**
+ * @param request quando true, dispara o diálogo nativo de permissão antes de
+ * ler o estado — só tem efeito se o sistema ainda aceitar perguntar.
+ */
+export async function getLocationDiagnostics(request = false): Promise<LocationDiagnostics> {
+  const plataforma: LocationDiagnostics['platform'] =
+    Platform.OS === 'android' ? 'android' : Platform.OS === 'ios' ? 'ios' : 'other';
+
+  let perm = await Location.getForegroundPermissionsAsync();
+  if (request && perm.status !== 'granted' && perm.canAskAgain) {
+    perm = await Location.requestForegroundPermissionsAsync();
+  }
+
+  let servicesEnabled = false;
+  try {
+    servicesEnabled = await Location.hasServicesEnabledAsync();
+  } catch {
+    // Alguns fabricantes lançam aqui quando o serviço está off — trata como off.
+  }
+
+  return {
+    platform: plataforma,
+    servicesEnabled,
+    status:
+      perm.status === 'granted'
+        ? 'granted'
+        : perm.status === 'denied'
+          ? 'denied'
+          : 'undetermined',
+    canAskAgain: perm.canAskAgain,
+    androidAccuracy: perm.android?.accuracy ?? null,
+    iosScope: perm.ios?.scope ?? null,
+  };
+}
+
+/**
+ * Abre a tela de configuração relevante. `services` = onde se liga a
+ * localização do aparelho; `app` = permissões deste app (onde se troca
+ * aproximada por precisa).
+ */
+export async function openLocationSettings(
+  target: 'app' | 'services',
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (target === 'services' && Platform.OS === 'android') {
+      await IntentLauncher.startActivityAsync('android.settings.LOCATION_SOURCE_SETTINGS');
+      return { ok: true };
+    }
+    // App settings serve pros dois casos no iOS (não há intent pra tela de
+    // serviços) e pro caso 'app' no Android.
+    await Linking.openSettings();
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Não foi possível abrir as configurações.',
+    };
+  }
 }
 
 export async function getCurrentLocation(): Promise<LocationResult> {

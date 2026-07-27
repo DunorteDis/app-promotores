@@ -34,7 +34,7 @@
         "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos da galeria nas visitas.",
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "16",
+      "buildNumber": "17",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -95,6 +95,14 @@
         {
           "photosPermission": "O aplicativo acessa suas fotos para registrar visitas.",
           "cameraPermission": "O aplicativo usa a câmera para registrar fotos das visitas."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "O aplicativo acessa suas fotos para registrar visitas.",
+          "savePhotosPermission": "O aplicativo salva as fotos das pesquisas na galeria do seu celular.",
+          "isAccessMediaLocationEnabled": false
         }
       ],
       [
