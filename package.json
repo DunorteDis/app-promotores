@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "prebuild": "expo prebuild"
+    "prebuild": "expo prebuild",
+    "build:apk": "expo prebuild --platform android && cd android && .\\gradlew.bat assembleRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a"
   },
   "dependencies": {
     "@react-native-community/netinfo": "11.4.1",
