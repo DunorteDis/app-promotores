@@ -12,7 +12,7 @@ import {
   INJECTED_JS,
 } from '@/services/bridge';
 import { captureImage, openFile, openGallery, pickImages, recordVideo, saveToGallery, sweepStaleCache, type MediaFile } from '@/services/media';
-import { cancelAppUpdate, downloadAndInstallApk } from '@/services/appUpdate';
+import { cancelAppUpdate, downloadAndInstallApk, getAppVersion } from '@/services/appUpdate';
 import {
   getCurrentLocation,
   getLocationDiagnostics,
@@ -359,6 +359,10 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             } else {
               sendResponse({ id: req.id, ok: false, error: result.error });
             }
+            break;
+          }
+          case 'app.getVersion': {
+            sendResponse({ id: req.id, ok: true, data: getAppVersion() });
             break;
           }
           case 'app.downloadUpdate': {

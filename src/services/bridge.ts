@@ -23,7 +23,8 @@ export type BridgeRequest = {
     | 'media.saveToGallery'
     | 'media.openGallery'
     | 'app.downloadUpdate'
-    | 'app.cancelUpdate';
+    | 'app.cancelUpdate'
+    | 'app.getVersion';
   payload?: Record<string, unknown>;
 };
 
@@ -115,6 +116,7 @@ export const INJECTED_JS = `
     openGallery: function () { return request('media.openGallery'); },
     downloadUpdate: function (payload) { return request('app.downloadUpdate', payload || {}); },
     cancelUpdate: function () { return request('app.cancelUpdate'); },
+    getAppVersion: function () { return request('app.getVersion'); },
     on: function (event, cb) {
       if (!listeners[event]) listeners[event] = [];
       listeners[event].push(cb);

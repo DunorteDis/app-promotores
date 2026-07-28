@@ -1,6 +1,31 @@
 import { Linking, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
+import * as Application from 'expo-application';
+
+export type AppVersionInfo = {
+  /** Ex.: "1.0.9" — o que o usuário vê e o que comparamos com o servidor. */
+  versionName: string | null;
+  /** Android: versionCode. iOS: CFBundleVersion. Só informativo. */
+  buildNumber: string | null;
+  platform: 'android' | 'ios' | 'other';
+};
+
+/**
+ * Versão instalada, lida do pacote nativo — não do app.json.
+ *
+ * A WebView não tem como saber isso sozinha, e sem esse dado o front não
+ * consegue comparar com a versão publicada pra decidir se avisa (ou bloqueia).
+ * Vem do pacote de propósito: é a única fonte que reflete o APK realmente
+ * instalado, mesmo quando o app.json do repositório já está adiantado.
+ */
+export function getAppVersion(): AppVersionInfo {
+  return {
+    versionName: Application.nativeApplicationVersion,
+    buildNumber: Application.nativeBuildVersion,
+    platform: Platform.OS === 'android' ? 'android' : Platform.OS === 'ios' ? 'ios' : 'other',
+  };
+}
 
 export type UpdateProgress = {
   loaded: number;
