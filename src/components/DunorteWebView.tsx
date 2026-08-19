@@ -84,6 +84,11 @@ export function DunorteWebView({ onOnlineChange }: Props) {
   // O attempt corrente falhou? Decidido em onError; onLoadEnd usa isso pra
   // saber se pode limpar o loadError (só carga real bem-sucedida limpa).
   const attemptErrorRef = useRef(false);
+  // Retry silencioso único por falha: no cold start offline a 1ª navegação
+  // perde a corrida pro service worker (que ainda está subindo junto com o
+  // processo do WebView) e falha — a 2ª, ~600ms depois, é servida do cache.
+  // Sem isto, a ErrorScreen "Sem conexão" piscava por ~1s antes do app abrir.
+  const autoRetryUsedRef = useRef(false);
 
   const clearLoadingTimeout = useCallback(() => {
     if (loadingTimeoutRef.current) {
@@ -501,6 +506,8 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             !url.startsWith('about:')
           ) {
             setLoadError(null);
+            // Sucesso rearma o retry silencioso pra uma futura queda.
+            autoRetryUsedRef.current = false;
           }
         }}
         onLoadProgress={({ nativeEvent }) => {
@@ -510,12 +517,26 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         onError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           attemptErrorRef.current = true;
+          // 1ª falha: retry silencioso com o loading por cima (cobre a página
+          // crua de erro do Chromium). Se falhar de novo, aí sim ErrorScreen.
+          if (!autoRetryUsedRef.current) {
+            autoRetryUsedRef.current = true;
+            showLoading();
+            setTimeout(() => webRef.current?.reload(), 600);
+            return;
+          }
           hideLoading();
           // ErrorScreen no lugar do Alert + página crua do Chromium: mensagem
           // clara pro promotor e botão de tentar de novo.
           setLoadError(nativeEvent.description || 'Falha ao carregar a página.');
         }}
         onHttpError={() => hideLoading()}
+        // O view de erro PADRÃO do react-native-webview ("Error loading page")
+        // aparecia no vão do retry silencioso (o onLoadEnd da carga falha
+        // derruba o overlay). Substituído pelo mesmo visual do loading: durante
+        // o retry parece carga contínua; na falha definitiva a ErrorScreen
+        // cobre este view por cima.
+        renderError={() => <LoadingOverlay visible />}
         javaScriptEnabled
         domStorageEnabled
         allowsBackForwardNavigationGestures
