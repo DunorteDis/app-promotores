@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { BackHandler, Linking, StyleSheet, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import * as Notifications from 'expo-notifications';
 import type { LocationSubscription } from 'expo-location';
@@ -531,6 +531,32 @@ export function DunorteWebView({ onOnlineChange }: Props) {
           setLoadError(nativeEvent.description || 'Falha ao carregar a página.');
         }}
         onHttpError={() => hideLoading()}
+        // Navegação do frame principal pra FORA dos domínios do app abre no
+        // aplicativo nativo (Maps, Waze, navegador) em vez de dentro da view.
+        // Resolve o débito antigo dos botões Maps/Waze abrindo o site na
+        // própria WebView e, no iOS, evita o bloqueio do App-Bound Domains
+        // (que barraria essas navegações). Subrecursos (imagens/S3/scripts)
+        // não passam por aqui — só navegação de página.
+        onShouldStartLoadWithRequest={(request) => {
+          const url = request.url ?? '';
+          if (
+            url.startsWith('about:') ||
+            url.startsWith('data:') ||
+            url.startsWith('blob:') ||
+            url.startsWith('chrome-error')
+          ) {
+            return true;
+          }
+          const isApp =
+            url.startsWith('https://vexo.dunorte.com.br') ||
+            url.startsWith('https://promotores.dunorte.com.br') ||
+            url.startsWith('http://localhost');
+          if ((request.isTopFrame ?? true) && !isApp) {
+            Linking.openURL(url).catch(() => {});
+            return false;
+          }
+          return true;
+        }}
         // O view de erro PADRÃO do react-native-webview ("Error loading page")
         // aparecia no vão do retry silencioso (o onLoadEnd da carga falha
         // derruba o overlay). Substituído pelo mesmo visual do loading: durante
@@ -547,6 +573,12 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         geolocationEnabled
         thirdPartyCookiesEnabled
         sharedCookiesEnabled
+        // iOS: habilita service worker no WKWebView (App-Bound Domains). Exige
+        // WKAppBoundDomains no infoPlist (app.json) com os domínios do app.
+        // Efeito colateral ACEITO: navegação do frame principal pra domínio
+        // fora da lista é bloqueada no iOS (a ponte nativa continua funcionando
+        // nos domínios listados). Sem efeito no Android.
+        limitsNavigationsToAppBoundDomains
         mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
       />
       {/* ErrorScreen ANTES do LoadingOverlay: durante o retry o loading pinta
