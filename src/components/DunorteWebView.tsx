@@ -20,7 +20,7 @@ import {
   requestLocationPermission,
   watchLocation,
 } from '@/services/location';
-import { getNetworkSnapshot, subscribeNetwork } from '@/services/network';
+import { configureNetworkProbe, getNetworkSnapshot, subscribeNetwork } from '@/services/network';
 import {
   getPushTokenAsync,
   registerForPushNotificationsAsync,
@@ -41,6 +41,9 @@ type Props = {
 };
 
 const LOADING_TIMEOUT_MS = 8000;
+// Debounce pra EXIBIR o banner offline: blips de sonda/handover 5G↔4G duram
+// menos que isso e nunca chegam a mostrar banner. Voltar online é imediato.
+const OFFLINE_DEBOUNCE_MS = 4000;
 
 export function DunorteWebView({ onOnlineChange }: Props) {
   const webRef = useRef<WebView>(null);
@@ -59,6 +62,7 @@ export function DunorteWebView({ onOnlineChange }: Props) {
   const locationEpochRef = useRef(0);
   const firstLoadDoneRef = useRef(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const offlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sessão de câmera nativa multi-shot (ponte: media.captureSession).
   // `streamPhotos`: quando o caller envia true, emitimos um evento `media.photo`
@@ -428,14 +432,38 @@ export function DunorteWebView({ onOnlineChange }: Props) {
   }, []);
 
   useEffect(() => {
+    // Sonda contra o próprio Vexo (em dev, o Vite local via adb reverse):
+    // o veredito de "internet alcançável" passa a ser "o app funciona?".
+    configureNetworkProbe(TARGET_URL);
     const sub = subscribeNetwork((snapshot) => {
       const isOnline = snapshot.isConnected && snapshot.isInternetReachable !== false;
-      setOnline(isOnline);
-      onOnlineChange?.(isOnline);
+      if (isOnline) {
+        // Voltou: cancela banner pendente e some imediatamente.
+        if (offlineTimerRef.current) {
+          clearTimeout(offlineTimerRef.current);
+          offlineTimerRef.current = null;
+        }
+        setOnline(true);
+        onOnlineChange?.(true);
+      } else if (!offlineTimerRef.current) {
+        // Caiu: só mostra o banner se continuar fora após o debounce.
+        offlineTimerRef.current = setTimeout(() => {
+          offlineTimerRef.current = null;
+          setOnline(false);
+          onOnlineChange?.(false);
+        }, OFFLINE_DEBOUNCE_MS);
+      }
+      // O PWA recebe todo snapshot cru, sem debounce.
       sendEvent({ event: 'network.update', data: snapshot });
     });
 
-    return () => sub();
+    return () => {
+      if (offlineTimerRef.current) {
+        clearTimeout(offlineTimerRef.current);
+        offlineTimerRef.current = null;
+      }
+      sub();
+    };
   }, [onOnlineChange, sendEvent]);
 
   useEffect(() => {
