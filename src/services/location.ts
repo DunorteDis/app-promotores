@@ -1,6 +1,7 @@
 import { Linking, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as IntentLauncher from 'expo-intent-launcher';
+import { getIosAccuracy, pedirPrecisaoTotalIos, type IosAccuracy } from '../../modules/location-accuracy';
 
 export type LocationPayload = {
   latitude: number;
@@ -32,8 +33,10 @@ export async function requestLocationPermission(): Promise<boolean> {
  * mais que o promotor ande até a porta da loja.
  *
  * No iOS o expo-location expõe só o `scope` (whenInUse/always), NÃO o
- * `accuracyAuthorization` (full/reduced) — lá `iosScope` é o que dá pra saber, e
- * precisão reduzida cai como sinal fraco mesmo.
+ * `accuracyAuthorization` — esse vem do módulo nativo `location-accuracy` em
+ * `iosAccuracy`, e é o espelho exato do `androidAccuracy`: `reduced` lá é o
+ * mesmo caso do `coarse` aqui. Em binário sem o módulo vem null, e aí a web
+ * volta a inferir precisão reduzida pela accuracy travada em quilômetros.
  */
 export type LocationDiagnostics = {
   platform: 'android' | 'ios' | 'other';
@@ -42,6 +45,7 @@ export type LocationDiagnostics = {
   canAskAgain: boolean;
   androidAccuracy: 'fine' | 'coarse' | 'none' | null;
   iosScope: 'whenInUse' | 'always' | 'none' | null;
+  iosAccuracy: IosAccuracy | null;
 };
 
 /**
@@ -76,7 +80,19 @@ export async function getLocationDiagnostics(request = false): Promise<LocationD
     canAskAgain: perm.canAskAgain,
     androidAccuracy: perm.android?.accuracy ?? null,
     iosScope: perm.ios?.scope ?? null,
+    // Sem permissão concedida o valor não significa nada (o iOS reporta
+    // `reduced` por padrão), e acusaria "Localização Exata desligada" pra quem
+    // na verdade nem liberou a localização ainda.
+    iosAccuracy: perm.status === 'granted' ? await getIosAccuracy() : null,
   };
+}
+
+/**
+ * Diálogo do sistema que liga a "Localização Exata" sem sair do app. `false`
+ * quando o usuário recusa ou o binário não tem o módulo — aí sobra os Ajustes.
+ */
+export async function requestIosFullAccuracy(): Promise<boolean> {
+  return pedirPrecisaoTotalIos();
 }
 
 /**

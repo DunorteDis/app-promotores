@@ -9,6 +9,7 @@ export type BridgeRequest = {
     | 'location.unwatch'
     | 'location.diagnostics'
     | 'location.openSettings'
+    | 'location.requestFullAccuracy'
     | 'network.get'
     | 'network.subscribe'
     | 'network.unsubscribe'
@@ -103,6 +104,7 @@ export const INJECTED_JS = `
     unwatchLocation: function () { return request('location.unwatch'); },
     locationDiagnostics: function (payload) { return request('location.diagnostics', payload || {}); },
     openLocationSettings: function (payload) { return request('location.openSettings', payload || {}); },
+    requestIosFullAccuracy: function () { return request('location.requestFullAccuracy'); },
     getNetwork: function () { return request('network.get'); },
     subscribeNetwork: function () { return request('network.subscribe'); },
     unsubscribeNetwork: function () { return request('network.unsubscribe'); },

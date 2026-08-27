@@ -17,6 +17,7 @@ import {
   getCurrentLocation,
   getLocationDiagnostics,
   openLocationSettings,
+  requestIosFullAccuracy,
   requestLocationPermission,
   watchLocation,
 } from '@/services/location';
@@ -347,6 +348,11 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             const payload = (req.payload ?? {}) as { request?: boolean };
             const diag = await getLocationDiagnostics(payload.request === true);
             sendResponse({ id: req.id, ok: true, data: diag });
+            break;
+          }
+          case 'location.requestFullAccuracy': {
+            const concedeu = await requestIosFullAccuracy();
+            sendResponse({ id: req.id, ok: true, data: { fullAccuracy: concedeu } });
             break;
           }
           case 'location.openSettings': {

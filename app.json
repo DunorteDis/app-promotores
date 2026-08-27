@@ -29,6 +29,9 @@
         "CFBundleAllowMixedLocalizations": true,
         "NSLocationWhenInUseUsageDescription": "Precisamos da sua localização para registrar visitas e rotas de promotor.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Precisamos da sua localização para registrar visitas e rotas de promotor.",
+        "NSLocationTemporaryUsageDescriptionDictionary": {
+          "checkinVisita": "Sem a localização exata o check-in não confirma que você está no PDV."
+        },
         "NSCameraUsageDescription": "Necessário para capturar fotos nas visitas.",
         "NSMicrophoneUsageDescription": "Necessário para capturar fotos e vídeos nas visitas.",
         "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos da galeria nas visitas.",
