@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vexo",
     "slug": "vexo",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "orientation": "portrait",
     "platforms": [
       "ios",
@@ -41,7 +41,7 @@
           "promotores.dunorte.com.br"
         ]
       },
-      "buildNumber": "18",
+      "buildNumber": "20",
       "config": {
         "usesNonExemptEncryption": false
       }
