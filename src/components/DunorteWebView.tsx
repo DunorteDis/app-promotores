@@ -12,7 +12,7 @@ import {
   INJECTED_JS,
 } from '@/services/bridge';
 import { captureImage, openFile, openGallery, pickImages, recordVideo, saveToGallery, sweepStaleCache, type MediaFile } from '@/services/media';
-import { cancelAppUpdate, downloadAndInstallApk, getAppVersion } from '@/services/appUpdate';
+import { getAppVersion, openUpdateLink } from '@/services/appUpdate';
 import {
   getCurrentLocation,
   getLocationDiagnostics,
@@ -387,18 +387,16 @@ export function DunorteWebView({ onOnlineChange }: Props) {
               sendResponse({ id: req.id, ok: false, error: 'URL da atualização ausente.' });
               break;
             }
-            const result = await downloadAndInstallApk(url, (progress) =>
-              sendEvent({ event: 'app.downloadProgress', data: progress }),
-            );
+            const result = await openUpdateLink(url);
             if (result.ok) {
-              sendResponse({ id: req.id, ok: true, data: { installed: true } });
+              sendResponse({ id: req.id, ok: true, data: { opened: true } });
             } else {
               sendResponse({ id: req.id, ok: false, error: result.error });
             }
             break;
           }
           case 'app.cancelUpdate': {
-            cancelAppUpdate();
+            // ponytail: não há mais download pra cancelar; responde ok pra não quebrar o front.
             sendResponse({ id: req.id, ok: true, data: { cancelled: true } });
             break;
           }

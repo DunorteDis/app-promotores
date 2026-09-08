@@ -43,8 +43,7 @@ export type BridgeEvent = {
     | 'network.update'
     | 'notification.received'
     | 'notification.response'
-    | 'media.photo'
-    | 'app.downloadProgress';
+    | 'media.photo';
   data: unknown;
 };
 

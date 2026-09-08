@@ -76,8 +76,7 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.REQUEST_INSTALL_PACKAGES"
+        "android.permission.RECORD_AUDIO"
       ],
       "versionCode": 8
     },
