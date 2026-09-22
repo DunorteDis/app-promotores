@@ -32,6 +32,7 @@ import { CameraSession } from './CameraSession';
 import { ErrorScreen } from './ErrorScreen';
 import { LoadingOverlay } from './LoadingOverlay';
 import { OfflineBanner } from './OfflineBanner';
+import { ScannerSession, type ScanResult } from './ScannerSession';
 
 // Build de desenvolvimento (expo run:android): abre o Vite local via adb
 // reverse (localhost no celular = PC). Release (__DEV__ false) segue produção.
@@ -81,6 +82,16 @@ export function DunorteWebView({ onOnlineChange }: Props) {
     sessionResolveRef.current?.(files);
     sessionResolveRef.current = null;
     setCameraSession((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  // Sessão de leitura de código de barras (ponte: scanner.read).
+  const [scanner, setScanner] = useState<{ visible: boolean }>({ visible: false });
+  const scannerResolveRef = useRef<((result: ScanResult) => void) | null>(null);
+
+  const handleScannerClose = useCallback((result: ScanResult) => {
+    scannerResolveRef.current?.(result);
+    scannerResolveRef.current = null;
+    setScanner({ visible: false });
   }, []);
 
   // Falha de carga do frame principal (sem internet, DNS, servidor fora).
@@ -288,6 +299,18 @@ export function DunorteWebView({ onOnlineChange }: Props) {
               ok: true,
               data: { files: streamPhotos ? [] : files },
             });
+            break;
+          }
+          case 'scanner.read': {
+            // Se já tem uma sessão pendente (não deveria), encerra a antiga
+            // como "não leu" pra não deixar o caller pendurado.
+            scannerResolveRef.current?.({ codigo: null, formato: null });
+
+            const lido = await new Promise<ScanResult>((resolve) => {
+              scannerResolveRef.current = resolve;
+              setScanner({ visible: true });
+            });
+            sendResponse({ id: req.id, ok: true, data: lido });
             break;
           }
           case 'media.recordVideo': {
@@ -636,6 +659,7 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             : undefined
         }
       />
+      <ScannerSession visible={scanner.visible} onClose={handleScannerClose} />
     </View>
   );
 }

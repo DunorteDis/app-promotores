@@ -23,6 +23,7 @@ export type BridgeRequest = {
     | 'media.openFile'
     | 'media.saveToGallery'
     | 'media.openGallery'
+    | 'scanner.read'
     | 'app.downloadUpdate'
     | 'app.cancelUpdate'
     | 'app.getVersion';
@@ -115,6 +116,7 @@ export const INJECTED_JS = `
     openFile: function (payload) { return request('media.openFile', payload || {}); },
     saveToGallery: function (payload) { return request('media.saveToGallery', payload || {}); },
     openGallery: function () { return request('media.openGallery'); },
+    scanBarcode: function (payload) { return request('scanner.read', payload || {}); },
     downloadUpdate: function (payload) { return request('app.downloadUpdate', payload || {}); },
     cancelUpdate: function () { return request('app.cancelUpdate'); },
     getAppVersion: function () { return request('app.getVersion'); },
