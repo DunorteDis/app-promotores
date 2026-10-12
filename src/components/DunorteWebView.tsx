@@ -621,6 +621,16 @@ export function DunorteWebView({ onOnlineChange }: Props) {
         originWhitelist={['https://*', 'http://*', 'about:*']}
         injectedJavaScriptBeforeContentLoaded={INJECTED_JS}
         injectedJavaScript={INJECTED_JS}
+        // O PROCESSO DA WEBVIEW MORRE SEM MATAR O APP — e aí a tela fica branca
+        // PARA SEMPRE. No iOS o WKWebView roda num processo separado que o
+        // sistema derruba sob pressão de memória (voltar da câmera com a foto
+        // grande em trânsito é o gatilho típico); o app segue vivo, a ponte
+        // segue respondendo, e o promotor fica olhando uma tela vazia sem nenhum
+        // botão, sem erro e sem saída a não ser matar o app na gaveta. No
+        // Android o renderer morto derrubava o app inteiro, que reabria sozinho
+        // — por isso isto nunca apareceu em teste no aparelho Android.
+        onContentProcessDidTerminate={() => webRef.current?.reload()}
+        onRenderProcessGone={() => webRef.current?.reload()}
         onMessage={onMessage}
         onLoadStart={({ nativeEvent }) => {
           // NÃO limpar loadError aqui: depois do onError o Android dispara um

@@ -209,8 +209,26 @@ export async function guardarFoto(payload: {
     const destino = uriPendente(fotoId);
     const temporario = `${RAIZ}.tmp_${fotoId}.jpg`;
 
-    await FileSystem.writeAsStringAsync(temporario, payload.base64, { encoding: 'base64' });
-    await FileSystem.moveAsync({ from: temporario, to: destino });
+    try {
+      await FileSystem.writeAsStringAsync(temporario, payload.base64, { encoding: 'base64' });
+      await FileSystem.moveAsync({ from: temporario, to: destino });
+    } catch (e) {
+      // GRAVAR UM ARQUIVO LOCAL SÓ FALHA POR FALTA DE ESPAÇO, na prática. E essa
+      // mensagem precisa ser esta, em português: é por ela que o lado web
+      // reconhece o caso e PARA, em vez de tentar o caminho antigo — que usaria o
+      // mesmo disco cheio e perderia a foto em silêncio.
+      //
+      // No iPhone esta é a ÚNICA defesa real: lá o piso de espaço livre nunca
+      // dispara, porque a API do iOS reporta a capacidade "importante", que inclui
+      // espaço purgável — num aparelho lotado ela ainda devolve gigabytes. O erro
+      // nativo, além disso, vem em inglês e não seria reconhecido.
+      await FileSystem.deleteAsync(temporario, { idempotent: true }).catch(() => {});
+      const detalhe = e instanceof Error ? e.message : String(e);
+      return {
+        ok: false,
+        error: `Sem espaço no aparelho para guardar a foto. Libere espaço — fotos, vídeos ou apps — e tente de novo. (${detalhe.slice(0, 80)})`,
+      };
+    }
 
     const info = await FileSystem.getInfoAsync(destino);
     const bytes = info.exists && typeof info.size === 'number' ? info.size : 0;
@@ -295,6 +313,13 @@ export async function subirFoto(payload: {
       httpMethod: 'PUT',
       headers: { 'Content-Type': payload.contentType || 'image/jpeg' },
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      // FOREGROUND explícito: no iOS o padrão é sessão de FUNDO, que por desenho
+      // ESPERA a conectividade em vez de falhar — sem rede a chamada simplesmente
+      // não volta. Como o check-out só sai depois que a fila esvazia, a visita
+      // ficava presa atrás de um upload que nunca ia nem falhar. No Android o
+      // mesmo uploadAsync rejeita em menos de um segundo, e é por isso que o
+      // teste no aparelho Android não tinha como ver este caso.
+      sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
     });
     if (r.status < 200 || r.status >= 300) return { ok: false, error: `Falha no upload (HTTP ${r.status}).` };
     const url = String(payload.publicUrl ?? '').trim();

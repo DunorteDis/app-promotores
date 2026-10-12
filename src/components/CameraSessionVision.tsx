@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   StyleSheet,
   Text,
@@ -132,14 +133,24 @@ export function CameraSessionVision({
   }, [visible, hasPermission, requestPermission]);
 
   // Formato 4:3. `photoAspectRatio` é a prioridade máxima (não muda o
-  // enquadramento de quem já funciona) e `photoResolution: 'max'` garante a foto
-  // sempre na resolução máxima. `videoResolution: 'max'` entra só como DESEMPATE:
-  // entre os formatos de foto máxima, escolhe o de preview mais nítido — era o
-  // que deixava o preview embaçado no iPhone 11 (a foto saía normal porque
-  // `takePhoto` usa um pipeline de captura com AF próprio).
+  // enquadramento de quem já funciona). `videoResolution: 'max'` entra só como
+  // DESEMPATE: entre os formatos de foto equivalentes, escolhe o de preview mais
+  // nítido — era o que deixava o preview embaçado no iPhone 11 (a foto saía
+  // normal porque `takePhoto` usa um pipeline de captura com AF próprio).
+  //
+  // A RESOLUÇÃO É UM ALVO, NÃO O MÁXIMO. Com `'max'`, um iPhone de 48 MP escolhe
+  // 8064x6048 e gera um JPEG de 10 a 20 MB. Esse arquivo é lido em base64 (que
+  // cresce um terço), atravessa a ponte como texto, é decodificado na WebView e
+  // vira um bitmap de centenas de MB — e o processo de conteúdo do WKWebView, que
+  // tem orçamento próprio de memória, é MORTO pelo sistema antes de ficar lento.
+  // A tela some e a foto, que ainda não tinha chegado ao disco, não existe em
+  // lugar nenhum. 2016x1512 (3 MP) continua MUITO acima dos ~1280 px que a web
+  // guarda depois de comprimir, e corta o tráfego pela ponte em cerca de dez
+  // vezes. O filtro escolhe o formato mais PRÓXIMO, então aparelho mais simples
+  // segue pegando o melhor que tem.
   const format = useCameraFormat(activeDevice ?? undefined, [
     { photoAspectRatio: 4 / 3 },
-    { photoResolution: 'max' },
+    { photoResolution: { width: 2016, height: 1512 } },
     { videoResolution: 'max' },
   ]);
 
@@ -321,9 +332,23 @@ export function CameraSessionVision({
         <View style={styles.permissionWrap}>
           <Text style={styles.permissionTitle}>Permissão de câmera</Text>
           <Text style={styles.permissionText}>
-            Precisamos da câmera pra capturar fotos das visitas.
+            Precisamos da câmera pra capturar fotos das visitas. Se o pedido não
+            aparecer, libere a câmera nos Ajustes do aparelho.
           </Text>
-          <TouchableOpacity style={styles.permissionBtn} onPress={() => void requestPermission()}>
+          <TouchableOpacity
+            style={styles.permissionBtn}
+            // Depois de NEGAR uma vez, o sistema não pergunta mais: o pedido
+            // volta negado na hora e o botão virava um nada — o promotor ficava
+            // batendo nele sem a câmera nunca abrir, e sem nenhuma pista de que
+            // a saída é pelos Ajustes. Isso é mais apertado no iOS, onde a
+            // segunda chamada JAMAIS mostra diálogo.
+            onPress={() => {
+              void (async () => {
+                const concedida = await requestPermission();
+                if (!concedida) await Linking.openSettings().catch(() => {});
+              })();
+            }}
+          >
             <Text style={styles.permissionBtnText}>Permitir</Text>
           </TouchableOpacity>
           <TouchableOpacity
