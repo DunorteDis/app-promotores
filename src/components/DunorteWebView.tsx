@@ -12,6 +12,15 @@ import {
   INJECTED_JS,
 } from '@/services/bridge';
 import { captureImage, openFile, openGallery, pickImages, recordVideo, saveToGallery, sweepStaleCache, type MediaFile } from '@/services/media';
+import {
+  apagarFoto,
+  confirmarFoto,
+  guardarFoto,
+  limparFotos,
+  listarFotos,
+  lerThumbFoto,
+  subirFoto,
+} from '@/services/fotoStore';
 import { getAppVersion, openUpdateLink } from '@/services/appUpdate';
 import {
   getCurrentLocation,
@@ -365,6 +374,81 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             } else {
               sendResponse({ id: req.id, ok: false, error: result.error });
             }
+            break;
+          }
+          // ── FOTO NO DISCO ──────────────────────────────────────────────
+          // Cada verbo devolve o resultado do fotoStore como está: o `ok`
+          // dele já distingue "não deu" de "deu", e a web precisa saber a
+          // diferença pra decidir se pode seguir sem a foto.
+          case 'foto.guardar': {
+            const payload = (req.payload ?? {}) as {
+              base64?: string;
+              visitaId?: string | number;
+              questaoId?: string | number;
+            };
+            const r = await guardarFoto({
+              base64: String(payload.base64 ?? ''),
+              visitaId: payload.visitaId,
+              questaoId: payload.questaoId,
+            });
+            if (r.ok) sendResponse({ id: req.id, ok: true, data: r });
+            else sendResponse({ id: req.id, ok: false, error: r.error });
+            break;
+          }
+          case 'foto.subir': {
+            const payload = (req.payload ?? {}) as {
+              fotoId?: string;
+              uploadUrl?: string;
+              publicUrl?: string;
+              contentType?: string;
+            };
+            const r = await subirFoto({
+              fotoId: String(payload.fotoId ?? ''),
+              uploadUrl: String(payload.uploadUrl ?? ''),
+              publicUrl: payload.publicUrl,
+              contentType: payload.contentType,
+            });
+            // `url` volta preenchida quando a foto JÁ tinha subido antes: a web
+            // usa ela e evita um segundo upload da mesma imagem.
+            // `ausente` = o arquivo não está mais no aparelho. Vai como SUCESSO
+            // com `enviada: false` de propósito: um erro aqui faria a web tentar
+            // indefinidamente e o item ficaria preso na fila, travando o
+            // check-out por uma foto que não existe mais.
+            if (r.ok) sendResponse({ id: req.id, ok: true, data: { enviada: !r.ausente, url: r.url } });
+            else sendResponse({ id: req.id, ok: false, error: r.error });
+            break;
+          }
+          case 'foto.confirmar': {
+            const payload = (req.payload ?? {}) as { fotoId?: string };
+            const r = await confirmarFoto({ fotoId: String(payload.fotoId ?? '') });
+            if (r.ok) sendResponse({ id: req.id, ok: true, data: { confirmada: true } });
+            else sendResponse({ id: req.id, ok: false, error: r.error });
+            break;
+          }
+          case 'foto.listar': {
+            const payload = (req.payload ?? {}) as {
+              visitaId?: string | number;
+              incluirEnviadas?: boolean;
+            };
+            const r = await listarFotos(payload);
+            sendResponse({ id: req.id, ok: true, data: r });
+            break;
+          }
+          case 'foto.thumb': {
+            const payload = (req.payload ?? {}) as { fotoId?: string };
+            const r = await lerThumbFoto({ fotoId: String(payload.fotoId ?? '') });
+            if (r.ok) sendResponse({ id: req.id, ok: true, data: r });
+            else sendResponse({ id: req.id, ok: false, error: r.error });
+            break;
+          }
+          case 'foto.apagar': {
+            const payload = (req.payload ?? {}) as { fotoId?: string };
+            sendResponse({ id: req.id, ok: true, data: await apagarFoto({ fotoId: String(payload.fotoId ?? '') }) });
+            break;
+          }
+          case 'foto.limpar': {
+            const payload = (req.payload ?? {}) as { dias?: number };
+            sendResponse({ id: req.id, ok: true, data: await limparFotos(payload) });
             break;
           }
           case 'location.diagnostics': {

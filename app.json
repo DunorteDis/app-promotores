@@ -78,7 +78,7 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "versionCode": 8
+      "versionCode": 12
     },
     "plugins": [
       "expo-router",

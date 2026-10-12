@@ -23,6 +23,15 @@ export type BridgeRequest = {
     | 'media.openFile'
     | 'media.saveToGallery'
     | 'media.openGallery'
+    // FOTO NO DISCO DO APARELHO (ver services/fotoStore.ts). A foto deixa de
+    // depender do IndexedDB da WebView, que é onde ela vem se perdendo.
+    | 'foto.guardar'
+    | 'foto.subir'
+    | 'foto.confirmar'
+    | 'foto.listar'
+    | 'foto.thumb'
+    | 'foto.apagar'
+    | 'foto.limpar'
     | 'scanner.read'
     | 'app.downloadUpdate'
     | 'app.cancelUpdate'
@@ -64,14 +73,56 @@ export const INJECTED_JS = `
   function post(message) {
     if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
       window.ReactNativeWebView.postMessage(JSON.stringify(message));
+      return true;
     }
+    return false;
   }
+
+  // RELÓGIO POR VERBO. Sem isto uma resposta perdida (canal do WebView
+  // descartando a mensagem, thread JS do app travada, WebView em background na
+  // hora da resposta) deixava a promessa pendurada PARA SEMPRE — e toda a
+  // segurança do caminho da foto depende de ela rejeitar: é a rejeição que faz a
+  // captura cair no caminho antigo em vez de evaporar sem tile e sem aviso.
+  //
+  // Só os verbos que são IO LOCAL ou rede nossa entram aqui. Os que esperam a
+  // PESSOA (captureSession, recordVideo, scanner, galeria, diálogo de permissão)
+  // e o download do APK ficam de fora de propósito: ali demorar é normal, e um
+  // relógio só criaria falha onde hoje não existe.
+  // Gravar/ler arquivo local é questão de segundos; os números são folgados pra
+  // aparelho fraco, mas não TÃO folgados: quando a resposta se perde, a web
+  // espera isto antes de reconsultar o que o app gravou, e a promotora está
+  // olhando a tela nesse tempo.
+  var TIMEOUTS = {
+    'foto.guardar': 25000,
+    'foto.subir': 300000,
+    'foto.confirmar': 15000,
+    'foto.listar': 10000,
+    'foto.thumb': 10000,
+    'foto.apagar': 15000,
+    'foto.limpar': 60000
+  };
 
   function request(type, payload) {
     return new Promise(function (resolve, reject) {
       var id = nextId();
-      pending[id] = { resolve: resolve, reject: reject };
-      post({ id: id, type: type, payload: payload || {} });
+      var ms = TIMEOUTS[type];
+      var relogio = ms ? setTimeout(function () {
+        if (!pending[id]) return;
+        delete pending[id];
+        reject(new Error('o app não respondeu a tempo (' + type + ')'));
+      }, ms) : null;
+      pending[id] = {
+        resolve: function (d) { if (relogio) clearTimeout(relogio); resolve(d); },
+        reject: function (e) { if (relogio) clearTimeout(relogio); reject(e); }
+      };
+      // Canal ausente: rejeita AGORA. Antes era no-op silencioso e a promessa
+      // ficava pendurada — e temFotoNativa() devolve true só por existir a
+      // função, então a foto ia por um caminho que não tinha para onde ir.
+      if (!post({ id: id, type: type, payload: payload || {} })) {
+        if (relogio) clearTimeout(relogio);
+        delete pending[id];
+        reject(new Error('ponte indisponível (' + type + ')'));
+      }
     });
   }
 
@@ -116,6 +167,13 @@ export const INJECTED_JS = `
     openFile: function (payload) { return request('media.openFile', payload || {}); },
     saveToGallery: function (payload) { return request('media.saveToGallery', payload || {}); },
     openGallery: function () { return request('media.openGallery'); },
+    fotoGuardar: function (payload) { return request('foto.guardar', payload || {}); },
+    fotoSubir: function (payload) { return request('foto.subir', payload || {}); },
+    fotoConfirmar: function (payload) { return request('foto.confirmar', payload || {}); },
+    fotoListar: function (payload) { return request('foto.listar', payload || {}); },
+    fotoThumb: function (payload) { return request('foto.thumb', payload || {}); },
+    fotoApagar: function (payload) { return request('foto.apagar', payload || {}); },
+    fotoLimpar: function (payload) { return request('foto.limpar', payload || {}); },
     scanBarcode: function (payload) { return request('scanner.read', payload || {}); },
     downloadUpdate: function (payload) { return request('app.downloadUpdate', payload || {}); },
     cancelUpdate: function () { return request('app.cancelUpdate'); },
