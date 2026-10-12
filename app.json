@@ -35,6 +35,7 @@
         "NSCameraUsageDescription": "Necessário para capturar fotos nas visitas.",
         "NSMicrophoneUsageDescription": "Necessário para capturar fotos e vídeos nas visitas.",
         "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos da galeria nas visitas.",
+        "NSPhotoLibraryAddUsageDescription": "Necessário para salvar na galeria as fotos baixadas das pesquisas.",
         "ITSAppUsesNonExemptEncryption": false,
         "WKAppBoundDomains": [
           "vexo.dunorte.com.br",
