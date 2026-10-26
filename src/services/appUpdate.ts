@@ -1,5 +1,7 @@
-import { Linking, Platform } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 import * as Application from 'expo-application';
+
+import { concluirPlay, iniciarPlay, type ResultadoPlay } from '../../modules/play-update';
 
 export type AppVersionInfo = {
   /** Ex.: "1.0.9" — o que o usuário vê e o que comparamos com o servidor. */
@@ -49,4 +51,41 @@ export async function openUpdateLink(url: string): Promise<UpdateResult> {
   } catch {
     return { ok: false, error: 'Não foi possível abrir o link de atualização.' };
   }
+}
+
+let perguntandoReinicio = false;
+
+/**
+ * O download flexível da Play terminou: falta reiniciar o app pra instalar.
+ * Pergunta em vez de reiniciar direto — o promotor pode estar no meio de uma
+ * visita. "Depois" não perde nada: a próxima abertura do app pergunta de novo.
+ */
+export function pedirReinicioPlay(): void {
+  if (perguntandoReinicio) return; // ouvinte e checagem da web podem chegar juntos
+  perguntandoReinicio = true;
+  const fechar = () => {
+    perguntandoReinicio = false;
+  };
+  Alert.alert(
+    'Atualização baixada',
+    'Reinicie o Vexo para usar a nova versão.',
+    [
+      { text: 'Depois', style: 'cancel', onPress: fechar },
+      {
+        text: 'Reiniciar',
+        onPress: () => {
+          fechar();
+          concluirPlay().catch(() => {});
+        },
+      },
+    ],
+    { cancelable: true, onDismiss: fechar },
+  );
+}
+
+/** Abre o modal da Play. Se o flexível já tinha baixado, só falta reiniciar. */
+export async function atualizarPelaPlay(tipo: 'imediato' | 'flexivel'): Promise<ResultadoPlay> {
+  const resultado = await iniciarPlay(tipo);
+  if (resultado === 'baixada' && tipo === 'flexivel') pedirReinicioPlay();
+  return resultado;
 }

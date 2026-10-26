@@ -35,7 +35,9 @@ export type BridgeRequest = {
     | 'scanner.read'
     | 'app.downloadUpdate'
     | 'app.cancelUpdate'
-    | 'app.getVersion';
+    | 'app.getVersion'
+    | 'playUpdate.verificar'
+    | 'playUpdate.iniciar';
   payload?: Record<string, unknown>;
 };
 
@@ -99,7 +101,9 @@ export const INJECTED_JS = `
     'foto.listar': 10000,
     'foto.thumb': 10000,
     'foto.apagar': 15000,
-    'foto.limpar': 60000
+    'foto.limpar': 60000,
+    // Consulta à Play. Se ela não responder, a web cai no link, como antes.
+    'playUpdate.verificar': 15000
   };
 
   function request(type, payload) {
@@ -178,6 +182,8 @@ export const INJECTED_JS = `
     downloadUpdate: function (payload) { return request('app.downloadUpdate', payload || {}); },
     cancelUpdate: function () { return request('app.cancelUpdate'); },
     getAppVersion: function () { return request('app.getVersion'); },
+    playUpdateVerificar: function () { return request('playUpdate.verificar'); },
+    playUpdateIniciar: function (payload) { return request('playUpdate.iniciar', payload || {}); },
     on: function (event, cb) {
       if (!listeners[event]) listeners[event] = [];
       listeners[event].push(cb);

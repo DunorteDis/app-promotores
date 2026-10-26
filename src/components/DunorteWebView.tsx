@@ -21,7 +21,8 @@ import {
   lerThumbFoto,
   subirFoto,
 } from '@/services/fotoStore';
-import { getAppVersion, openUpdateLink } from '@/services/appUpdate';
+import { atualizarPelaPlay, getAppVersion, openUpdateLink, pedirReinicioPlay } from '@/services/appUpdate';
+import { aoBaixarPlay, verificarPlay } from '../../modules/play-update';
 import {
   getCurrentLocation,
   getLocationDiagnostics,
@@ -507,6 +508,16 @@ export function DunorteWebView({ onOnlineChange }: Props) {
             sendResponse({ id: req.id, ok: true, data: { cancelled: true } });
             break;
           }
+          case 'playUpdate.verificar': {
+            sendResponse({ id: req.id, ok: true, data: await verificarPlay() });
+            break;
+          }
+          case 'playUpdate.iniciar': {
+            const payload = (req.payload ?? {}) as { tipo?: string };
+            const tipo = payload.tipo === 'imediato' ? 'imediato' : 'flexivel';
+            sendResponse({ id: req.id, ok: true, data: await atualizarPelaPlay(tipo) });
+            break;
+          }
           default:
             sendResponse({ id: req.id, ok: false, error: `Tipo desconhecido: ${req.type}` });
         }
@@ -541,6 +552,9 @@ export function DunorteWebView({ onOnlineChange }: Props) {
   useEffect(() => {
     void sweepStaleCache();
   }, []);
+
+  // Download flexível da Play terminou com o app aberto: pergunta se reinicia.
+  useEffect(() => aoBaixarPlay(pedirReinicioPlay), []);
 
   useEffect(() => {
     // Sonda contra o próprio Vexo (em dev, o Vite local via adb reverse):

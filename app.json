@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vexo",
     "slug": "vexo",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "orientation": "portrait",
     "platforms": [
       "ios",
@@ -42,7 +42,7 @@
           "promotores.dunorte.com.br"
         ]
       },
-      "buildNumber": "22",
+      "buildNumber": "23",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -79,7 +79,7 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "versionCode": 13
+      "versionCode": 14
     },
     "plugins": [
       "expo-router",
